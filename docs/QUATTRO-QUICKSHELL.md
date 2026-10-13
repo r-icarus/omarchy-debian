@@ -187,3 +187,9 @@ wallpaper, 2x HiDPI scale, natural scrolling. Issues hit and their fixes
 7. **Packages needed on PikaOS that the phases don't install**: kitty +
    xdg-terminal-exec (TERMINAL target), grim/slurp/nautilus (keybinds),
    inotify-tools (plugin hot-reload watcher).
+8. **No AUR on Debian/PikaOS**: the menu's `install.aur` entry is hidden via
+   the user extension `~/.config/omarchy/extensions/omarchy-menu.jsonc`
+   (`{"install.aur": {"when":"false"}}`), deployed from
+   `overlay/config/omarchy/extensions/`. The `omarchy-pkg-aur-*` /
+   `omarchy-update-aur-pkgs` shims stay in `overlay/bin` as graceful-error
+   guards for anything that calls them programmatically.

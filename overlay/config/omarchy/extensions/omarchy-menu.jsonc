@@ -1,0 +1,4 @@
+// Debian/PikaOS port: no AUR. Hide Arch-only menu entries.
+{
+  "install.aur": {"when":"false"}
+}
