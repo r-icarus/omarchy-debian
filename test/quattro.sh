@@ -148,7 +148,8 @@ fi
 #
 # Harness notes:
 #   * The real account ${OMARCHY_TEST_USER:-rice} (same uid as the test
-#     runner) doubles as the deployment target — real ownership checks.
+#     runner) provides identity/ownership checks, but a getent shim maps its
+#     home to a disposable directory under TMP. Tests never clean the real home.
 #   * A local git repo fakes upstream omarchy@quattro with the genuine theme
 #     layout; the run passes OMARCHY_QUATTRO_REF=<fake HEAD>; no network.
 #   * sudo/apt/apt-cache/curl/quickshell/systemctl shims keep it offline; the
@@ -159,9 +160,11 @@ fi
 TEST_USER=${OMARCHY_TEST_USER:-rice}
 TEST_UID=$(id -u "$TEST_USER" 2>/dev/null || true)
 TEST_GROUP=$(id -gn "$TEST_USER" 2>/dev/null || true)
-GT=$(getent passwd "$TEST_USER" | cut -d: -f6)
+REAL_TEST_HOME=$(getent passwd "$TEST_USER" | cut -d: -f6)
+GT="$TMP/target-home"
+mkdir -p "$GT"
 INVOKING_UID=$(id -u)
-if [[ -z $TEST_UID || -z $TEST_GROUP || -z $GT ]]; then
+if [[ -z $TEST_UID || -z $TEST_GROUP || -z $REAL_TEST_HOME ]]; then
   bad "test account '$TEST_USER' must exist (getent) for target-user tests"
 elif [[ $TEST_UID == 0 || $TEST_UID != "$INVOKING_UID" ]]; then
   bad "test account '$TEST_USER' (uid ${TEST_UID}) must be non-root and match the invoking uid ${INVOKING_UID}"
@@ -175,6 +178,18 @@ SHIM=$TMP/shim
 H=$TMP/invoke
 FQ=$TMP/quattro-src
 mkdir -p "$SHIM" "$H"
+
+# Keep target-user resolution realistic while confining all writes to TMP.
+cat >"$SHIM/getent" <<'EOF'
+#!/bin/bash
+if [[ ${1:-} == passwd && ${2:-} == ${FAKE_TARGET_USER:-} && -n ${FAKE_TARGET_HOME:-} ]]; then
+  printf '%s:x:%s:%s:Quattro test user:%s:/bin/bash\n' \
+    "$FAKE_TARGET_USER" "$FAKE_TARGET_UID" "$FAKE_TARGET_GID" "$FAKE_TARGET_HOME"
+  exit 0
+fi
+exec /usr/bin/getent "$@"
+EOF
+chmod +x "$SHIM/getent"
 
 # --- fake upstream repo: branch quattro with the genuine theme layout ----------
 mkdir -p "$FQ/themes/tokyo-night/backgrounds" "$FQ/themes/gruvbox/backgrounds" "$FQ/shell"
@@ -240,6 +255,8 @@ run_install() { # <invoking-home> <install.sh args...> -> combined output
   local h=$1
   shift
   env -i PATH="$SHIM:$PATH" HOME="$h" TERM=dumb \
+    FAKE_TARGET_USER="$TEST_USER" FAKE_TARGET_UID="$TEST_UID" \
+    FAKE_TARGET_GID="$(id -g "$TEST_USER")" FAKE_TARGET_HOME="$GT" \
     OMARCHY_QUATTRO_REPO="file://$FQ" \
     OMARCHY_QUATTRO_REF="$FQREF" \
     OMARCHY_QUATTRO_PATH="$GT/.local/share/omarchy-quattro" \
@@ -250,6 +267,8 @@ run_install() { # <invoking-home> <install.sh args...> -> combined output
 
 run_phase31() { # <target-user> <theme> -> combined output; rc in PHASE_RC
   env -i PATH="$SHIM:$PATH" HOME="$H" TERM=dumb \
+    FAKE_TARGET_USER="$TEST_USER" FAKE_TARGET_UID="$TEST_UID" \
+    FAKE_TARGET_GID="$(id -g "$TEST_USER")" FAKE_TARGET_HOME="$GT" \
     OMARCHY_DEBIAN_ROOT="$ROOT" \
     OMARCHY_DEBIAN_PROFILE=quattro \
     OMARCHY_DEBIAN_DRY_RUN=0 \
@@ -264,6 +283,7 @@ run_phase31() { # <target-user> <theme> -> combined output; rc in PHASE_RC
 run_pty() { # <answers-file> <invoking-home> <args...>  (real pty via script)
   local answers=$1 h=$2 a
   local cmd="timeout 120 env -i PATH='$SHIM:$PATH' HOME='$h' TERM=xterm \
+FAKE_TARGET_USER='$TEST_USER' FAKE_TARGET_UID='$TEST_UID' FAKE_TARGET_GID='$(id -g "$TEST_USER")' FAKE_TARGET_HOME='$GT' \
 OMARCHY_QUATTRO_REPO='file://$FQ' OMARCHY_QUATTRO_REF='$FQREF' \
 OMARCHY_QUATTRO_PATH='$GT/.local/share/omarchy-quattro' \
 OMARCHY_DEBIAN_LOG_FILE='$h/install.log' bash '$ROOT/install.sh'"
@@ -274,11 +294,10 @@ OMARCHY_DEBIAN_LOG_FILE='$h/install.log' bash '$ROOT/install.sh'"
   script -qec "$cmd" /dev/null <"$answers" 2>&1 || true
 }
 
-clean_target() { # wipe every path this feature may create under the target home
-  rm -rf "$GT/.local/state/omarchy" "$GT/.config/omarchy" \
-    "$GT/.local/share/omarchy-quattro" "$GT/.local/state/omarchy-debian" \
-    "$GT/.config/hypr" "$GT/.config/uwsm" "$GT/.config/waybar" "$GT/.config/sway" \
-    "$GT/.bashrc" "$GT/Pictures" "$GT/.local/share/applications"
+clean_target() { # wipe only the isolated target home under this test's TMP
+  [[ $GT == "$TMP/target-home" ]] || { bad "refusing to clean non-temporary target home: $GT"; return 1; }
+  rm -rf -- "$GT"
+  mkdir -p "$GT"
 }
 
 CUR="$GT/.local/state/omarchy/current"
