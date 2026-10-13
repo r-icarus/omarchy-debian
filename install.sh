@@ -12,6 +12,7 @@
 #   ./install.sh --no-desktop    # packages + dotfiles only, no compositor/DM
 #   ./install.sh --compositor sway
 #   ./install.sh --phases 10-apt-deps,50-dotfiles
+#   ./install.sh --profile quattro  # + native Quattro Quickshell top bar
 #
 # Everything is idempotent: re-running installs only what is missing and only
 # deploys overlay files that differ.
@@ -35,6 +36,7 @@ export OMARCHY_DEBIAN_ASSUME_YES=0
 export OMARCHY_DEBIAN_NO_DESKTOP=0
 export OMARCHY_DEBIAN_COMPOSITOR=auto
 export OMARCHY_DEBIAN_STRICT=0
+export OMARCHY_DEBIAN_PROFILE=${OMARCHY_DEBIAN_PROFILE:-none}
 PHASES=()
 
 while (($#)); do
@@ -50,6 +52,10 @@ while (($#)); do
     --phases)
       shift
       IFS=',' read -ra PHASES <<<"${1:?--phases needs a comma-separated list}"
+      ;;
+    --profile)
+      shift
+      OMARCHY_DEBIAN_PROFILE="${1:?--profile needs a value (quattro)}"
       ;;
     -h | --help)
       sed -n '2,22p' "$0"
@@ -92,6 +98,7 @@ ALL_PHASES=(
   10-apt-deps.sh
   20-external.sh
   30-upstream.sh
+  31-quattro-shell.sh
   40-desktop.sh
   45-hardware.sh
   50-dotfiles.sh

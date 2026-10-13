@@ -17,6 +17,11 @@ This repository contains **no upstream code**. It is an install layer that:
 5. Deploys dotfiles, a classic-syntax Hyprland config, session entries, and
    enables the services upstream enables.
 
+Optional profile: `./install.sh --profile quattro` installs the **native
+Omarchy Quattro Quickshell top bar** (pinned upstream quattro checkout +
+Quickshell runtime) — see [docs/QUATTRO-QUICKSHELL.md](docs/QUATTRO-QUICKSHELL.md).
+PikaOS is supported without touching its kernel/driver/updater stack.
+
 Upstream reference commit: `9c5482c` (bump `OMARCHY_UPSTREAM_REF` in
 `install/30-upstream.sh` to track newer).
 

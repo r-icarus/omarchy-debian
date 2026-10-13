@@ -1,0 +1,44 @@
+#!/bin/bash
+# Roll back the quattro profile's user-level changes:
+#   - restore ~/.config/omarchy/shell.json from its .pre-omarchy backup
+#     (or remove it when there was none),
+#   - remove the read-only quattro checkout clone,
+#   - restore the pre-quattro Hyprland config backup when present.
+# Never touches the default omarchy checkout, installed packages, or anything
+# outside the user's home. Idempotent; prints exactly what it did.
+#
+# omarchy:summary=Undo the quattro Quickshell profile (configs + clone)
+
+set -euo pipefail
+
+say() { printf '%s\n' "$*"; }
+
+# 1. shell.json
+dst="$HOME/.config/omarchy/shell.json"
+if [[ -f $dst.pre-omarchy ]]; then
+  mv "$dst.pre-omarchy" "$dst"
+  say "restored $dst from backup"
+elif [[ -f $dst ]]; then
+  rm -f "$dst"
+  say "removed $dst (no pre-omarchy backup existed)"
+fi
+
+# 2. quattro checkout (read-only clone; safe to delete outright)
+q="$HOME/.local/share/omarchy-quattro"
+if [[ -d $q ]]; then
+  rm -rf "$q"
+  say "removed $q"
+fi
+
+# 3. Hyprland config backup (created by the dotfiles phase on first deploy;
+#    restoring it rolls the config back to its pre-omarchy-debian state).
+h="$HOME/.config/hypr/hyprland.conf"
+if [[ -f $h.pre-omarchy ]]; then
+  cp -a "$h.pre-omarchy" "$h"
+  say "restored $h from $h.pre-omarchy (pre-omarchy-debian state)"
+else
+  say "no $h.pre-omarchy backup — leaving the current config in place"
+fi
+
+say "quattro rollback complete (installed packages were left in place;"
+say "remove with: sudo apt-get remove quickshell libcpptrace)"

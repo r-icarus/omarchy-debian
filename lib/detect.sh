@@ -10,13 +10,16 @@ OMARCHY_DEBIAN_DETECT_LOADED=1
 # Populates:
 #   DISTRO_ID        e.g. "debian", "ubuntu"
 #   DISTRO_VERSION   e.g. "13", "24.04"
-#   DISTRO_CODENAME  e.g. "trixie", "noble"
+#   DISTRO_CODENAME e.g. "trixie", "noble"
 #   DISTRO_FAMILY    "debian" for anything apt-based
 #   SUPPORT_LEVEL    "supported" | "partial" | "unsupported"
+#   IS_PIKAOS        "1" on PikaOS (Ubuntu-based, pika-aware tooling)
 detect_distro() {
-  [[ -r /etc/os-release ]] || die "cannot detect OS: /etc/os-release missing"
-  # shellcheck disable=SC1091
-  . /etc/os-release
+  # OMARCHY_DEBIAN_OS_RELEASE overrides the probed file (used by tests only).
+  local os_release=${OMARCHY_DEBIAN_OS_RELEASE:-/etc/os-release}
+  [[ -r $os_release ]] || die "cannot detect OS: /etc/os-release missing"
+  # shellcheck disable=SC1090
+  . "$os_release"
 
   DISTRO_ID="${ID:-unknown}"
   DISTRO_VERSION="${VERSION_ID:-0}"
@@ -32,6 +35,15 @@ detect_distro() {
   command -v apt-get >/dev/null || die "apt-get not found; this installer requires a Debian/Ubuntu system"
 
   SUPPORT_LEVEL="unsupported"
+  IS_PIKAOS=0
+  # PikaOS: Ubuntu-based with pika tooling (pika-apk / pika-install). Detected
+  # by /etc/os-release ID or its distro-unique /etc/pika-info file. It keeps
+  # its own kernel, Mesa/NVIDIA stack, bootloader, and updater — this project
+  # never modifies those.
+  if [[ $DISTRO_ID == "pikaos" || -f /etc/pika-info ]] ||
+    grep -qi '^ID_LIKE=.*pika' /etc/os-release 2>/dev/null; then
+    IS_PIKAOS=1
+  fi
   case "$DISTRO_ID" in
     debian)
       # The Hyprland stack lives in trixie-backports (not main). forky/sid
@@ -62,7 +74,12 @@ detect_distro() {
       ;;
   esac
 
-  export DISTRO_ID DISTRO_VERSION DISTRO_CODENAME DISTRO_FAMILY SUPPORT_LEVEL
+  export DISTRO_ID DISTRO_VERSION DISTRO_CODENAME DISTRO_FAMILY SUPPORT_LEVEL IS_PIKAOS
+}
+
+# True on PikaOS. Requires detect_distro to have run.
+is_pikaos() {
+  [[ ${IS_PIKAOS:-0} == "1" ]]
 }
 
 # True when running in a container / WSL / otherwise lacking a real session

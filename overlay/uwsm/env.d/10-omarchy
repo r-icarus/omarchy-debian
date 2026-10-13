@@ -3,6 +3,8 @@
 
 export OMARCHY_PATH="${OMARCHY_PATH:-$HOME/.local/share/omarchy}"
 export OMARCHY_DEBIAN_PATH="${OMARCHY_DEBIAN_PATH:-$HOME/.local/share/omarchy-debian}"
+# Quattro profile checkout (no-op when the profile was not installed).
+export OMARCHY_QUATTRO_PATH="${OMARCHY_QUATTRO_PATH:-$HOME/.local/share/omarchy-quattro}"
 
 # Overlay bin first (apt-backed omarchy-pkg-* shims), then upstream bin.
 PATH="$OMARCHY_DEBIAN_PATH/overlay/bin:$OMARCHY_PATH/bin:$HOME/.local/bin:$PATH"

@@ -1,0 +1,36 @@
+#!/bin/bash
+# Toggle bar visibility without killing the Quattro Quickshell.
+# Mirrors upstream's bar-off flag (omacom/omarchy quattro): the shell watches
+# ~/.local/state/omarchy/toggles/bar-off; upstream then nudges the bar over
+# IPC. This port writes the same flag and, when the upstream
+# omarchy-shell IPC helper is available on PATH, asks the bar to re-sync
+# (quiet best-effort — the toggle works even when the shell is not up).
+#
+# omarchy:summary=Toggle the Quattro top bar (toggle|on|off)
+# omarchy:args=[toggle|on|off]
+# omarchy:examples=omarchy-quattro-bar-toggle | omarchy-quattro-bar-toggle off
+
+set -euo pipefail
+
+TOGGLES_DIR="$HOME/.local/state/omarchy/toggles"
+FLAG="$TOGGLES_DIR/bar-off"
+mkdir -p "$TOGGLES_DIR"
+
+case "${1:-toggle}" in
+  on)
+    rm -f "$FLAG"
+    ;;
+  off)
+    touch "$FLAG"
+    ;;
+  toggle)
+    if [[ -f $FLAG ]]; then rm -f "$FLAG"; else touch "$FLAG"; fi
+    ;;
+  *)
+    echo "usage: omarchy-quattro-bar-toggle [toggle|on|off]" >&2
+    exit 1
+    ;;
+esac
+
+command -v omarchy-shell >/dev/null && omarchy-shell -q omarchy.bar syncHidden || true
+exit 0

@@ -1,0 +1,108 @@
+# Quattro Quickshell bar (native Omarchy shell) — PikaOS / Debian / Ubuntu
+
+This profile deploys the **real Omarchy Quattro top bar** (the upstream
+Quickshell implementation at `omacom/omarchy` branch `quattro`), not a Waybar
+imitation. It is opt-in:
+
+```bash
+./install.sh --profile quattro            # full install with the native bar
+./install.sh --profile quattro --dry-run  # resolve only, change nothing
+./install.sh --phases 31-quattro-shell.sh # just the quattro phase
+```
+
+## What it does
+
+1. **PikaOS-safe by construction.** PikaOS is detected via `is_pikaos()`
+   (os-release `ID=pikaos`, `ID_LIKE=…pika`, or `/etc/pika-info`). Nothing in
+   this project edits PikaOS repositories, kernel, Mesa/NVIDIA stack,
+   bootloader, or its updater. The only system-level change is `apt-get
+   install ./pinned.deb` of two leaf packages (quickshell + libcpptrace);
+   all other dependencies resolve from the distro's existing repositories.
+   No pacman/yay anywhere; no third-party apt *repository* is added — the
+   .debs come from direct, sha256-pinned pool file URLs.
+2. **Pinned quattro checkout, read-only.** Clones `omacom/omarchy` branch
+   `quattro` at a pinned commit to `~/.local/share/omarchy-quattro`
+   (separate from the default-branch checkout; never modified).
+   * Pin: `7e7a5600a3c989eb8658dd12409fa7e0479078bb` (`install/31-quattro-shell.sh`).
+3. **Quickshell runtime** (`install/31-quattro-shell.sh`):
+   - distro `quickshell` package when apt carries one (Debian forky/sid,
+     trixie-backports), else
+   - pinned upstream .debs `quickshell 0.3.2ppa1` + `libcpptrace 1.0.4ppa8`
+     (DankLinux PPA *pool direct URLs*, sha256-verified per arch, amd64+arm64),
+     installed through `apt-get install ./file.deb` so Qt/Wayland deps resolve
+     from the system's own repos. If the base Qt is older than the build
+     needs, apt refuses and the phase reports it honestly and keeps waybar.
+   - plus the QML runtime modules the bar imports (workerscript, layouts,
+     controls, window, templates) from the distro repo.
+4. **Curated bar config** deployed to `~/.config/omarchy/shell.json`
+   (existing file backed up to `.pre-omarchy` first): workspaces, active
+   window, clock, tray — the widgets whose dependencies are satisfied by the
+   quickshell binary itself. Audio included (Quickshell.Services.Pipewire is
+   built in). Network/battery/bluetooth widgets are NOT enabled by default:
+   they need NetworkManager/UPower/BlueZ present and are left for explicit
+   enabling (see below).
+5. **Session wiring** (`overlay/config/hypr/hyprland.conf`):
+   `exec-once` runs `omarchy-quattro-launch` when present, else waybar.
+   The launcher mirrors upstream `omarchy-launch-shell` (journal logging via
+   systemd-cat, `QS_DISABLE_FILE_WATCHER=1`, supervised relaunch with a
+   compositor-alive check).
+6. **Hyprland bindings** (already in the classic-syntax config): terminal,
+   launcher (fuzzel / omarchy-menu), browser, close, fullscreen, float,
+   workspaces 1-10 + move, screenshots, lock, audio, brightness, plus
+   `SUPER+SHIFT+SPACE` bar toggle (upstream `bar-off` flag protocol).
+
+## What is verified where
+
+| Check | Where | Status |
+|---|---|---|
+| Phase logic, gating, idempotence, pins | `test/quattro.sh` (hermetic) | passing (CI) |
+| Bar config contract (only known widget ids) | `test/quattro.sh` | passing (CI) |
+| PikaOS detection (ID, marker, negative) | `test/quattro.sh` | passing (CI) |
+| Binding presence in hyprland.conf | `test/quattro.sh` | passing (CI) |
+| Rollback + toggle helper behavior (fake HOME) | `test/quattro.sh` | passing (CI) |
+| Pinned .deb URLs + sha256 | captured 2026-10-13; phase verifies at install time | verified reachable |
+| quattro checkout pinned ref exists | fetched 2026-10-13 | verified |
+| **Bar actually rendering on PikaOS** | needs a real PikaOS graphical session | **not verified here** |
+
+This host is not PikaOS and has no Wayland session for the shell: everything
+above the "rendering" line is static/unit validation only. First graphical
+check on target: log into the Omarchy (Debian) Hyprland session and confirm
+the bar renders (workspaces, active window, clock, tray), then
+`journalctl --user -t omarchy-quattro` if it does not.
+
+## Rollback
+
+```bash
+omarchy-quattro-rollback   # restores shell.json backup, removes the quattro clone,
+                           # restores pre-omarchy hyprland.conf backup if present
+sudo apt-get remove quickshell libcpptrace   # optional: drop the runtime
+```
+
+## Unsupported / not yet done
+
+- **Lua Hyprland config**: upstream quattro configures Hyprland through its
+  Lua API; this repo ships the classic-syntax config (works on every packaged
+  Hyprland). Bindings listed above are ported, not the full upstream set.
+- **Upstream `omarchy-*` CLI surface** (omarchy-menu, omarchy bar …): those
+  helpers exist only inside the quattro checkout's `bin/`; they are on PATH
+  in the session (via the uwsm env) but untested on Debian/PikaOS. The bar
+  toggle uses the same flag protocol via `omarchy-quattro-bar-toggle`.
+- **Network/battery/bluetooth/weather widgets**: disabled pending dependency
+  proof on target (NetworkManager, UPower, BlueZ). Enable by editing
+  `~/.config/omarchy/shell.json` (ids: `omarchy.network`, `omarchy.power`,
+  `omarchy.bluetooth`, `omarchy.weather`).
+- **quickshell on Debian 13/12 or Ubuntu 24.04**: the pinned 0.3.2 build
+  needs Qt ≥ 6.10.2; older bases must build from source.
+
+## Build from source (fallback)
+
+```bash
+sudo apt-get install -y git cmake ninja-build pkg-config \
+  qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-declarative-private-dev \
+  qt6-tools-dev qt6-svg-dev qt6-wayland qt6-multimedia-dev \
+  libpipewire-0.3-dev libpolkit-agent-1-dev libpolkit-gobject-1-dev \
+  libpam0g-dev libjemalloc-dev wayland-protocols libxcb1-dev
+git clone https://github.com/outfoxxed/quickshell && cd quickshell
+cmake -B build -GNinja -DCRASH_REPORTER=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build && sudo cmake --install build
+```
