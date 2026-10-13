@@ -193,3 +193,10 @@ wallpaper, 2x HiDPI scale, natural scrolling. Issues hit and their fixes
    `overlay/config/omarchy/extensions/`. The `omarchy-pkg-aur-*` /
    `omarchy-update-aur-pkgs` shims stay in `overlay/bin` as graceful-error
    guards for anything that calls them programmatically.
+9. **Theme-aware Chromium**: upstream ships `~/.config/chromium-flags.conf`
+   (an Arch convention). Debian's chromium reads `/etc/chromium.d/` instead —
+   50-dotfiles installs `overlay/etc/chromium.d/omarchy-chromium.conf` (Wayland
+   ozone, gnome-libsecret, overlay scrollbars, `--load-extension` pointing at
+   the checkout's copy-url / yt-dlp / whatsapp-slim). Theme following is pure
+   config: the profile's `browser.theme` Preferences keys make Chromium track
+   the system GTK color scheme the omarchy themes drive.

@@ -87,6 +87,13 @@ if [[ $DRY_RUN != "1" ]]; then
     [[ -f $f ]] || continue
     $SUDO install -Dm644 "$f" "/etc/environment.d/$(basename "$f")"
   done
+  # Chromium flags: Debian's chromium reads /etc/chromium.d (not Arch's
+  # ~/.config/chromium-flags.conf). Wayland, system theme store, and the
+  # omarchy checkout's bundled extensions.
+  for f in "$OVERLAY"/etc/chromium.d/*.conf; do
+    [[ -f $f ]] || continue
+    $SUDO install -Dm644 "$f" "/etc/chromium.d/$(basename "$f")"
+  done
   for f in "$OVERLAY"/sddm.conf.d/*.conf; do
     [[ -f $f ]] || continue
     $SUDO install -Dm644 "$f" "/etc/sddm.conf.d/$(basename "$f")"
