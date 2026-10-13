@@ -68,6 +68,15 @@ fi
 deploy_tree "$OVERLAY/config" "$HOME/.config"
 deploy_tree "$OVERLAY/uwsm" "$HOME/.config/uwsm"
 
+# PikaOS's hyprland package postinst deletes /usr/share/wayland-sessions/
+# hyprland.desktop (it ships pika-hyprland instead), which breaks
+# `uwsm start -e -D Hyprland hyprland.desktop`. Provide it at the user level
+# (uwsm searches ~/.local/share/wayland-sessions) so the session resolves.
+if command -v Hyprland >/dev/null 2>&1 && [[ ! -f /usr/share/wayland-sessions/hyprland.desktop ]]; then
+  deploy_file "$OVERLAY/wayland-sessions/hyprland-user.desktop" \
+    "$HOME/.local/share/wayland-sessions/hyprland.desktop"
+fi
+
 # --- 3. system-level overlay files -------------------------------------------
 if [[ $DRY_RUN != "1" ]]; then
   for f in "$OVERLAY"/wayland-sessions/*.desktop; do

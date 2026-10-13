@@ -92,6 +92,35 @@ else
   log "quattro checkout at $(git -C "$OMARCHY_QUATTRO_PATH" rev-parse --short HEAD)"
 fi
 
+# --- 1b. Debian/PikaOS compatibility patches for the pinned quattro tree -----
+# The pinned quattro QML targets a newer quickshell than Debian/PikaOS ship
+# (0.3.2): its QML grammar treats `native` and `transient` as reserved tokens.
+# Rename those identifiers so the shell parses. Idempotent via git apply --check.
+if [[ $DRY_RUN != "1" ]]; then
+  PATCH="$OMARCHY_DEBIAN_ROOT/patches/quattro-qml-compat.patch"
+  if [[ -f $PATCH ]]; then
+    if git -C "$OMARCHY_QUATTRO_PATH" apply --check "$PATCH" 2>/dev/null; then
+      git -C "$OMARCHY_QUATTRO_PATH" apply "$PATCH"
+      log "applied quattro QML compat patch"
+    elif ! git -C "$OMARCHY_QUATTRO_PATH" diff --quiet; then
+      log "quattro tree already patched (or locally modified)"
+    fi
+  fi
+
+  # PikaOS's Hyprland segfaults when a cursor shape fails to resolve: the
+  # skeletal `omarchy-startup` blank-cursor theme (left_ptr only, no
+  # index.theme) returns null cairo surfaces. Complete it from a full system
+  # cursor theme when one is available.
+  STARTUP_CURSORS="$OMARCHY_QUATTRO_PATH/default/hypr/cursors/omarchy-startup"
+  if [[ -d $STARTUP_CURSORS/cursors ]] \
+     && [[ ! -f $STARTUP_CURSORS/index.theme ]] \
+     && [[ -d /usr/share/icons/Bibata-Modern-Classic/cursors ]]; then
+    cp /usr/share/icons/Bibata-Modern-Classic/cursors/* "$STARTUP_CURSORS/cursors/"
+    printf '[Icon Theme]\nName=omarchy-startup\nInherits=hicolor\n' >"$STARTUP_CURSORS/index.theme"
+    log "completed omarchy-startup cursor theme from Bibata-Modern-Classic"
+  fi
+fi
+
 # --- 2. initial theme: Debian-safe subset of the genuine theme -----------------
 # Mirrors upstream bin/omarchy-theme-set (quattro@pinned ref): stage
 # colors.toml, shell.toml (when shipped), the theme directory + theme.name, and

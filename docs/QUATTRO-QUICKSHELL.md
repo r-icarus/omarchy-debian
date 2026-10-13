@@ -150,3 +150,40 @@ git clone https://github.com/outfoxxed/quickshell && cd quickshell
 cmake -B build -GNinja -DCRASH_REPORTER=OFF -DCMAKE_BUILD_TYPE=Release
 cmake --build build && sudo cmake --install build
 ```
+
+## PikaOS field notes (2026-10-13, first graphical bring-up)
+
+Verified end-to-end on PikaOS 4 (nest, Hyprland 0.56.2 pika build, quickshell
+0.3.2): session start via uwsm, quattro bar with full default widget set,
+wallpaper, 2x HiDPI scale, natural scrolling. Issues hit and their fixes
+(all now encoded in the installer/overlay):
+
+1. **PikaOS deletes the system hyprland.desktop** (`hyprland` postinst removes
+   `/usr/share/wayland-sessions/hyprland.desktop` when `pika-hyprland` exists),
+   so `uwsm start -e -D Hyprland hyprland.desktop` fails and the session
+   bounces back to the greeter. 50-dotfiles now deploys a user-level
+   `~/.local/share/wayland-sessions/hyprland.desktop`.
+2. **quickshell 0.3.2's QML grammar reserves `native` and `transient`**,
+   which the pinned quattro QML uses as identifiers — several shell services
+   (background, notifications) failed to load. `patches/quattro-qml-compat.patch`
+   renames them; 31-quattro-shell.sh applies it after the pinned checkout.
+3. **`QtQuick.Effects` QML module is not a hard dependency** — needed for
+   tray/background/lock/image-picker: `qml6-module-qtquick-effects`.
+4. **PikaOS Hyprland segfaults (SEGV in CCursorBuffer)** when a cursor shape
+   resolves to a null surface: the skeletal `omarchy-startup` blank-cursor
+   theme plus PikaOS's self-inheriting `default` theme alias trigger it.
+   31-quattro-shell.sh completes the startup theme from Bibata and the uwsm
+   env pins a complete cursor theme.
+5. **Hyprland 0.56 config syntax**: the overlay's classic-syntax
+   `hyprland.conf` needed updates (shadow block, `windowrule` field=value
+   selectors; `dwindle:pseudotile`/`misc:vfr` removed). On Hyprland >= 0.50
+   the upstream quattro **Lua** config is preferred (copy the checkout's
+   `config/hypr/*.lua` to `~/.config/hypr/`; it silences the legacy-conf
+   deprecation advisory). Runtime `hyprctl keyword monitor`/`output scale`
+   is a no-op on the pika build — set scale in `monitors.lua` and restart.
+6. **The quattro shell reads `~/.config/omarchy/shell.json`** — the curated
+   layout omits network/power/bluetooth. For the full default widget set,
+   copy the checkout's `config/omarchy/shell.json` instead.
+7. **Packages needed on PikaOS that the phases don't install**: kitty +
+   xdg-terminal-exec (TERMINAL target), grim/slurp/nautilus (keybinds),
+   inotify-tools (plugin hot-reload watcher).
