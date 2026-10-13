@@ -1,0 +1,57 @@
+#!/bin/bash
+# omarchy:summary=Install a font package and switch the system to it (Debian port)
+# omarchy:args=<display-name> <arch-package> <family>
+# omarchy:requires-sudo=true
+# Debian port: upstream maps menu entries to Arch package names
+# (ttf-*-nerd). Translate to the Debian package, and resolve the real
+# font family from fontconfig afterwards (Debian's builds are not Nerd
+# Font patched, so the family name differs too).
+
+set -euo pipefail
+
+name="${1-}"
+package="${2-}"
+family="${3-}"
+
+if [[ -z $name || -z $package || -z $family ]]; then
+  echo "Usage: omarchy-install-font <display-name> <package> <family>" >&2
+  exit 1
+fi
+
+# Arch package -> Debian package
+declare -A deb_map=(
+  [ttf-iosevka-nerd]=fonts-iosevka
+  [ttf-jetbrains-mono-nerd]=fonts-jetbrains-mono
+  [ttf-firacode-nerd]=fonts-firacode
+  [ttf-cascadia-mono-nerd]=fonts-cascadia-code
+  [ttf-cascadia-code-nerd]=fonts-cascadia-code
+  [ttf-hack-nerd]=fonts-hack
+)
+deb_pkg=${deb_map[$package]:-}
+
+echo "Installing ${name}..."
+if [[ -n $deb_pkg ]]; then
+  omarchy-pkg-add "$deb_pkg"
+else
+  echo "No Debian package known for '$package'" >&2
+  echo "(available: ${!deb_map[*]})" >&2
+  exit 1
+fi
+
+sleep 1
+
+# Resolve the actual family name from the freshly installed package.
+real_family=$(fc-list | sed -n "s/^[^:]*: \([^:]*\):style.*$/\1/p" | sort -u | grep -ixF "$family" | head -1 || true)
+if [[ -z $real_family ]]; then
+  # Fall back: match on the first word of the requested family (e.g. "Iosevka
+  # Nerd Font Mono" -> "Iosevka").
+  base=${family%% Nerd*}
+  real_family=$(fc-list | sed -n "s/^[^:]*: \([^:]*\):style.*$/\1/p" | sort -u | grep -ixF "$base" | head -1 || true)
+fi
+if [[ -z $real_family ]]; then
+  echo "Warning: could not resolve family '$family'; using it as-is" >&2
+  real_family=$family
+fi
+
+echo "Switching monospace font to: ${real_family}"
+exec omarchy-font-set "$real_family"

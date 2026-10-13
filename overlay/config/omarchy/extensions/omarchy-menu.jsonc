@@ -1,4 +1,8 @@
 // Debian/PikaOS port: no AUR. Hide Arch-only menu entries.
 {
-  "install.aur": {"when":"false"}
+  "install.aur": {"when":"false"},
+  // No Debian packages for these fonts (see overlay/bin/omarchy-install-font)
+  "install.style.font.meslo": {"when":"false"},
+  "install.style.font.victor": {"when":"false"},
+  "install.style.font.bitstream": {"when":"false"}
 }
