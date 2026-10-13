@@ -59,6 +59,7 @@ imagemagick	apt	imagemagick
 imv	apt-any	imv	imv-wayland on some releases
 inetutils	apt	inetutils-ping
 inotify-tools	apt	inotify-tools
+kitty	apt	kitty	Default omarchy terminal
 inxi	apt	inxi
 llvm	apt	llvm
 networkmanager	apt	network-manager
