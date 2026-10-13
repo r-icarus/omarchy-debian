@@ -291,6 +291,16 @@ install_quickshell_runtime || {
   exit 0
 }
 
+# The Quickshell Apps menu resolves desktop entries with gtk-launch. Debian
+# ships that executable separately from GTK's runtime libraries.
+if ! command -v gtk-launch >/dev/null 2>&1; then
+  if apt_available libgtk-3-bin; then
+    apt_install libgtk-3-bin
+  else
+    warn "gtk-launch unavailable — Apps menu entries will not launch"
+  fi
+fi
+
 # QML runtime modules the bar imports that are not hard Depends of the .deb.
 for mod in \
   qml6-module-qtqml-workerscript \

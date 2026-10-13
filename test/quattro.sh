@@ -75,6 +75,7 @@ gate_skip=$(OMARCHY_DEBIAN_ROOT=$ROOT OMARCHY_DEBIAN_PROFILE=none bash install/3
 if [[ $gate_skip == *"not selected"* ]]; then pass "phase no-ops without --profile quattro"; else bad "phase gating (output: $gate_skip)"; fi
 
 # ---------------------------------------------------------- helper contracts
+check "Quickshell app menu installs gtk-launch dependency" grep -q 'apt_install libgtk-3-bin' install/31-quattro-shell.sh
 check "omarchy-quattro-launch parses" bash -n overlay/bin/omarchy-quattro-launch
 check "omarchy-quattro-bar-toggle parses" bash -n overlay/bin/omarchy-quattro-bar-toggle
 check "omarchy-quattro-rollback parses" bash -n overlay/bin/omarchy-quattro-rollback
