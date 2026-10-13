@@ -2,31 +2,45 @@
 # Optional profile: native Omarchy Quattro (Quickshell) top bar.
 #
 # Enabled with:  ./install.sh --profile quattro
+#   --user <name> / OMARCHY_TARGET_USER   target Linux account (default: the
+#                                         invoking user, or SUDO_USER as root)
+#   --theme <name> / OMARCHY_THEME        initial theme (default: tokyo-night)
 #
 # What this phase does:
 #   1. Clones omacom/omarchy branch `quattro` read-only at a pinned commit to
 #      $OMARCHY_QUATTRO_PATH (separate from the default/master checkout; the
 #      upstream tree is never modified).
-#   2. Installs the Quickshell runtime: the distro package when apt carries
+#   2. Initializes the Debian-safe subset of the selected theme — colors.toml,
+#      shell.toml when the theme ships one, the current theme directory/name,
+#      and the current background symlink — under the TARGET user's
+#      ~/.local/state/omarchy/current/, mirroring upstream omarchy-theme-set.
+#      No upstream hooks run: nothing that assumes Arch, retints unrelated
+#      apps, or mutates other apps/packages.
+#   3. Installs the Quickshell runtime: the distro package when apt carries
 #      one (Debian forky/sid/trixie-backports), else a pinned upstream .deb
 #      pair (quickshell + libcpptrace, sha256-verified) from the DankLinux
 #      PPA *pool* — no third-party repository is ever added to the system.
 #      On PikaOS this means its repositories, kernel, Mesa/NVIDIA stack,
 #      bootloader, and updater stay untouched.
-#   3. Deploys a curated ~/.config/omarchy/shell.json (backup-first) that
-#      limits the bar to widgets whose dependencies are satisfied by the
-#      quickshell binary itself (workspaces, active window, clock, tray,
-#      indicators via the clock/menu, audio via PipeWire).
+#   4. Deploys a curated shell.json (backup-first) to the TARGET user's
+#      ~/.config/omarchy/ limiting the bar to widgets whose dependencies are
+#      satisfied by the quickshell binary itself (workspaces, active window,
+#      clock, tray, indicators via the clock/menu, audio via PipeWire).
+#
+# All user configuration/state is deployed with target ownership even when
+# this phase runs through sudo/root. Existing theme state is backed up first
+# to ~/.local/state/omarchy/current.pre-omarchy; omarchy-quattro-rollback
+# restores it. Everything is idempotent.
 #
 # The Hyprland wiring (exec-once launch, bar toggle, menu binding) lives in
 # overlay/config/hypr/hyprland.conf + overlay/bin/omarchy-quattro-* and is
 # deployed by 50-dotfiles; it degrades to waybar when quickshell is absent.
-# Rollback: overlay/bin/omarchy-quattro-rollback (see docs/QUATTRO-QUICKSHELL.md).
 
 set -euo pipefail
 source "$OMARCHY_DEBIAN_ROOT/lib/log.sh"
 source "$OMARCHY_DEBIAN_ROOT/lib/detect.sh"
 source "$OMARCHY_DEBIAN_ROOT/lib/apt.sh"
+source "$OMARCHY_DEBIAN_ROOT/lib/target.sh"
 
 if [[ ${OMARCHY_DEBIAN_PROFILE:-} != "quattro" ]]; then
   log "profile 'quattro' not selected — skipping native Quickshell bar (use ./install.sh --profile quattro)"
@@ -38,10 +52,16 @@ detect_distro
 # Pinned upstream ref (omacom/omarchy, branch `quattro`). Bump to track newer.
 : "${OMARCHY_QUATTRO_REPO:=https://github.com/omacom/omarchy.git}"
 : "${OMARCHY_QUATTRO_REF:=7e7a5600a3c989eb8658dd12409fa7e0479078bb}"
-: "${OMARCHY_QUATTRO_PATH:=$HOME/.local/share/omarchy-quattro}"
+: "${OMARCHY_QUATTRO_PATH:=${OMARCHY_TARGET_HOME:-$HOME}/.local/share/omarchy-quattro}"
 export OMARCHY_QUATTRO_PATH
 
 DRY_RUN=${OMARCHY_DEBIAN_DRY_RUN:-0}
+
+# --- 0. target user + theme (resolution normally done by install.sh) -----------
+resolve_target_user "${OMARCHY_TARGET_USER:-}"
+TARGET_HOME=$OMARCHY_TARGET_HOME
+OMARCHY_THEME=${OMARCHY_THEME:-$OMARCHY_DEFAULT_THEME}
+export OMARCHY_THEME
 
 if is_pikaos; then
   log "PikaOS detected — PikaOS repositories, kernel, Mesa/NVIDIA stack,"
@@ -54,8 +74,9 @@ if [[ $DRY_RUN == "1" ]]; then
 else
   if [[ ! -d $OMARCHY_QUATTRO_PATH/.git ]]; then
     log "cloning upstream omarchy (quattro) -> $OMARCHY_QUATTRO_PATH"
-    mkdir -p "$(dirname "$OMARCHY_QUATTRO_PATH")"
+    omd_install_dir "$(dirname "$OMARCHY_QUATTRO_PATH")"
     git clone --quiet --branch quattro "$OMARCHY_QUATTRO_REPO" "$OMARCHY_QUATTRO_PATH"
+    omd_chown_path "$OMARCHY_QUATTRO_PATH"
   fi
   (
     cd "$OMARCHY_QUATTRO_PATH"
@@ -71,7 +92,84 @@ else
   log "quattro checkout at $(git -C "$OMARCHY_QUATTRO_PATH" rev-parse --short HEAD)"
 fi
 
-# --- 2. Quickshell runtime ------------------------------------------------------
+# --- 2. initial theme: Debian-safe subset of the genuine theme -----------------
+# Mirrors upstream bin/omarchy-theme-set (quattro@pinned ref): stage
+# colors.toml, shell.toml (when shipped), the theme directory + theme.name, and
+# the current background symlink under ~/.local/state/omarchy/current/.
+# Deliberately NOT run: omarchy-theme-set-templates and the app retint hooks
+# (Arch-oriented), shell IPC, and any package hooks. Existing state is backed
+# up first; the whole step is idempotent.
+CURRENT_STATE="$TARGET_HOME/.local/state/omarchy/current"
+CURRENT_THEME_DIR="$CURRENT_STATE/theme"
+THEME_SRC_DIR="$OMARCHY_QUATTRO_PATH/themes/$OMARCHY_THEME"
+
+init_theme_state() {
+  if [[ ! -d $THEME_SRC_DIR ]]; then
+    die "invalid theme '$OMARCHY_THEME': not present in the pinned quattro checkout ($OMARCHY_QUATTRO_PATH/themes)"
+  fi
+  [[ -f $THEME_SRC_DIR/colors.toml ]] ||
+    die "invalid theme '$OMARCHY_THEME': no colors.toml in $THEME_SRC_DIR"
+
+  # Backup-first: preserve any PRE-EXISTING theme state exactly once. State we
+  # deployed on an earlier (idempotent) run is not "pre-existing" — otherwise
+  # the second run would snapshot our own output and rollback would "restore"
+  # it instead of the user's original state.
+  if [[ -e $CURRENT_STATE && ! -e ${CURRENT_STATE}.pre-omarchy && ! -f $CURRENT_STATE/.omarchy-debian-theme ]] ; then
+    cp -a "$CURRENT_STATE" "${CURRENT_STATE}.pre-omarchy"
+    omd_chown_path "${CURRENT_STATE}.pre-omarchy"
+    log "backed up $CURRENT_STATE -> ${CURRENT_STATE}.pre-omarchy"
+  fi
+
+  # Idempotent re-init: replace the staged theme with the pinned checkout's.
+  rm -rf "$CURRENT_THEME_DIR"
+  omd_install_dir "$CURRENT_THEME_DIR"
+  local f
+  for f in colors.toml shell.toml; do
+    [[ -f $THEME_SRC_DIR/$f ]] || continue
+    omd_install 644 "$THEME_SRC_DIR/$f" "$CURRENT_THEME_DIR/$f"
+  done
+  if [[ -d $THEME_SRC_DIR/backgrounds ]]; then
+    omd_install_dir "$CURRENT_THEME_DIR/backgrounds"
+    while IFS= read -r -d '' f; do
+      omd_install 644 "$f" "$CURRENT_THEME_DIR/backgrounds/${f##*/}"
+    done < <(find "$THEME_SRC_DIR/backgrounds" -maxdepth 1 -type f -print0)
+  fi
+
+  printf '%s\n' "$OMARCHY_THEME" >"$TMP_THEME_NAME"
+  omd_install 644 "$TMP_THEME_NAME" "$CURRENT_STATE/theme.name"
+
+  # Current background: first image of the staged theme, as a relative symlink
+  # inside the current state dir (same shape upstream's theme-set produces).
+  local bg=""
+  if [[ -d $CURRENT_THEME_DIR/backgrounds ]]; then
+    bg=$(find "$CURRENT_THEME_DIR/backgrounds" -maxdepth 1 -type f \
+      \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' \
+         -o -iname '*.bmp' -o -iname '*.webp' \) | sort | head -1)
+  fi
+  if [[ -n $bg ]]; then
+    ln -sfn "theme/${bg#"$CURRENT_THEME_DIR"/}" "$CURRENT_STATE/background"
+    omd_chown_path "$CURRENT_STATE/background"
+  fi
+
+  # Marker identifying state deployed by THIS phase (idempotence: never treat
+  # our own output as user state to back up on a later run).
+  printf '%s\n' "$OMARCHY_QUATTRO_REF" >"$TMP_THEME_MARKER"
+  omd_install 644 "$TMP_THEME_MARKER" "$CURRENT_STATE/.omarchy-debian-theme"
+
+  log "initialized theme '$OMARCHY_THEME' -> $CURRENT_STATE (colors.toml$( [[ -f $CURRENT_THEME_DIR/shell.toml ]] && printf ' + shell.toml' ), background: ${bg:-none})"
+}
+
+TMP_THEME_NAME=$(mktemp)
+TMP_THEME_MARKER=$(mktemp)
+trap 'rm -f "$TMP_THEME_NAME" "$TMP_THEME_MARKER"' EXIT
+if [[ $DRY_RUN == "1" ]]; then
+  log "dry-run: initialize theme '$OMARCHY_THEME' state -> $CURRENT_STATE"
+else
+  omd_install_dir "$TARGET_HOME/.local/state/omarchy" "$TARGET_HOME/.config/omarchy"
+  init_theme_state
+fi
+
+# --- 3. Quickshell runtime ------------------------------------------------------
 # Pinned upstream .debs (DankLinux PPA pool, direct file URLs — adding the PPA
 # repository itself is deliberately NOT done). sha256 pins per architecture.
 QS_VERSION="0.3.2ppa1"
@@ -159,21 +257,22 @@ for mod in \
   fi
 done
 
-# --- 3. curated bar config (backup-first, idempotent) --------------------------
+# --- 4. curated bar config (backup-first, idempotent, target-owned) ------------
 SHELL_JSON_SRC="$OMARCHY_DEBIAN_ROOT/overlay/quattro/config/omarchy/shell.json"
-SHELL_JSON_DST="$HOME/.config/omarchy/shell.json"
+SHELL_JSON_DST="$TARGET_HOME/.config/omarchy/shell.json"
 if [[ $DRY_RUN == "1" ]]; then
   log "dry-run: deploy $SHELL_JSON_SRC -> $SHELL_JSON_DST"
 else
-  mkdir -p "$HOME/.config/omarchy" "$HOME/.local/state/omarchy/toggles"
+  omd_install_dir "$TARGET_HOME/.local/state/omarchy/toggles"
   if [[ -f $SHELL_JSON_DST ]] && cmp -s "$SHELL_JSON_SRC" "$SHELL_JSON_DST"; then
     : # already ours — idempotent no-op
   else
     if [[ -f $SHELL_JSON_DST && ! -f $SHELL_JSON_DST.pre-omarchy ]]; then
       cp -a "$SHELL_JSON_DST" "$SHELL_JSON_DST.pre-omarchy"
+      omd_chown_path "$SHELL_JSON_DST.pre-omarchy"
       log "backed up $SHELL_JSON_DST -> $SHELL_JSON_DST.pre-omarchy"
     fi
-    install -Dm644 "$SHELL_JSON_SRC" "$SHELL_JSON_DST"
+    omd_install 644 "$SHELL_JSON_SRC" "$SHELL_JSON_DST"
     log "deployed quattro bar layout -> $SHELL_JSON_DST"
   fi
 fi

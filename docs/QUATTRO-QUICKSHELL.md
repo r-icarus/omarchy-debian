@@ -7,8 +7,43 @@ imitation. It is opt-in:
 ```bash
 ./install.sh --profile quattro            # full install with the native bar
 ./install.sh --profile quattro --dry-run  # resolve only, change nothing
+./install.sh --profile quattro --user ricardo --theme tokyo-night
+OMARCHY_TARGET_USER=ricardo OMARCHY_THEME=tokyo-night ./install.sh --profile quattro
 ./install.sh --phases 31-quattro-shell.sh # just the quattro phase
 ```
+
+### Target user + initial theme
+
+| Input | CLI | Environment | Default |
+|---|---|---|---|
+| Target account | `--user ricardo` | `OMARCHY_TARGET_USER=ricardo` | see below |
+| Initial theme | `--theme tokyo-night` | `OMARCHY_THEME=tokyo-night` | `tokyo-night` |
+
+- **Precedence: CLI > environment > interactive prompt > safe unattended
+  default.** When the installer runs on a TTY and a value is omitted, it asks
+  ("Which existing Linux user should receive the Omarchy configuration?",
+  "Which initial Quattro theme?"). Unattended, the target user defaults to a
+  valid non-root `SUDO_USER` when running as root, else the invoking non-root
+  user; the theme defaults to `tokyo-night`.
+- The target home is resolved with `getent passwd` — custom home paths work,
+  and nothing is ever built as `/home/$USER`. Nonexistent accounts and `root`
+  are rejected with a nonzero exit.
+- The selected theme is validated against the **pinned quattro checkout**
+  (`OMARCHY_QUATTRO_REF`): a theme must exist as a directory with a
+  `colors.toml` under `themes/` in that exact commit, or the install aborts
+  before writing any state.
+- Theme initialization stages the Debian-safe subset of the genuine theme
+  into `~/.local/state/omarchy/current/` (target-owned), mirroring upstream
+  `omarchy-theme-set`: `theme/colors.toml`, `theme/shell.toml` when the theme
+  ships one, `theme/backgrounds/`, `theme.name`, and the relative
+  `background` symlink pointing at the theme's first image. Upstream hooks
+  that assume Arch or mutate unrelated apps/packages (template retints,
+  `omarchy-theme-set-*` app hooks, shell IPC) are **not** run.
+- All deployment is backup-first and idempotent: pre-existing
+  `~/.local/state/omarchy/current` is preserved once as `current.pre-omarchy`
+  before any change, and re-running only refreshes what differs. When the
+  installer runs through sudo/root, every deployed file/directory carries the
+  target user's ownership.
 
 ## What it does
 
@@ -24,7 +59,14 @@ imitation. It is opt-in:
    `quattro` at a pinned commit to `~/.local/share/omarchy-quattro`
    (separate from the default-branch checkout; never modified).
    * Pin: `7e7a5600a3c989eb8658dd12409fa7e0479078bb` (`install/31-quattro-shell.sh`).
-3. **Quickshell runtime** (`install/31-quattro-shell.sh`):
+3. **Initial theme (Debian-safe subset).** The selected theme (default
+   `tokyo-night`, see "Target user + initial theme" above) is validated
+   against the pinned checkout and staged into the target user's
+   `~/.local/state/omarchy/current/` — `theme/colors.toml`, `shell.toml`
+   when shipped, `theme/backgrounds/`, `theme.name`, and the `background`
+   symlink — mirroring upstream `omarchy-theme-set` without its Arch/app
+   hooks. Backup-first, idempotent, target-owned.
+4. **Quickshell runtime** (`install/31-quattro-shell.sh`):
    - distro `quickshell` package when apt carries one (Debian forky/sid,
      trixie-backports), else
    - pinned upstream .debs `quickshell 0.3.2ppa1` + `libcpptrace 1.0.4ppa8`
@@ -34,19 +76,19 @@ imitation. It is opt-in:
      needs, apt refuses and the phase reports it honestly and keeps waybar.
    - plus the QML runtime modules the bar imports (workerscript, layouts,
      controls, window, templates) from the distro repo.
-4. **Curated bar config** deployed to `~/.config/omarchy/shell.json`
+5. **Curated bar config** deployed to `~/.config/omarchy/shell.json`
    (existing file backed up to `.pre-omarchy` first): workspaces, active
    window, clock, tray — the widgets whose dependencies are satisfied by the
    quickshell binary itself. Audio included (Quickshell.Services.Pipewire is
    built in). Network/battery/bluetooth widgets are NOT enabled by default:
    they need NetworkManager/UPower/BlueZ present and are left for explicit
    enabling (see below).
-5. **Session wiring** (`overlay/config/hypr/hyprland.conf`):
+6. **Session wiring** (`overlay/config/hypr/hyprland.conf`):
    `exec-once` runs `omarchy-quattro-launch` when present, else waybar.
    The launcher mirrors upstream `omarchy-launch-shell` (journal logging via
    systemd-cat, `QS_DISABLE_FILE_WATCHER=1`, supervised relaunch with a
    compositor-alive check).
-6. **Hyprland bindings** (already in the classic-syntax config): terminal,
+7. **Hyprland bindings** (already in the classic-syntax config): terminal,
    launcher (fuzzel / omarchy-menu), browser, close, fullscreen, float,
    workspaces 1-10 + move, screenshots, lock, audio, brightness, plus
    `SUPER+SHIFT+SPACE` bar toggle (upstream `bar-off` flag protocol).
@@ -73,8 +115,10 @@ the bar renders (workspaces, active window, clock, tray), then
 ## Rollback
 
 ```bash
-omarchy-quattro-rollback   # restores shell.json backup, removes the quattro clone,
-                           # restores pre-omarchy hyprland.conf backup if present
+omarchy-quattro-rollback   # restores theme state (current.pre-omarchy backup,
+                           # or removes it when none existed), restores
+                           # shell.json, removes the quattro clone, restores
+                           # the pre-omarchy hyprland.conf backup if present
 sudo apt-get remove quickshell libcpptrace   # optional: drop the runtime
 ```
 

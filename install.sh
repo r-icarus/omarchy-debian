@@ -13,6 +13,8 @@
 #   ./install.sh --compositor sway
 #   ./install.sh --phases 10-apt-deps,50-dotfiles
 #   ./install.sh --profile quattro  # + native Quattro Quickshell top bar
+#   ./install.sh --profile quattro --user ricardo --theme tokyo-night
+#   OMARCHY_TARGET_USER=ricardo OMARCHY_THEME=tokyo-night ./install.sh --profile quattro
 #
 # Everything is idempotent: re-running installs only what is missing and only
 # deploys overlay files that differ.
@@ -30,6 +32,8 @@ source "$OMARCHY_DEBIAN_ROOT/lib/detect.sh"
 source "$OMARCHY_DEBIAN_ROOT/lib/apt.sh"
 # shellcheck source=lib/map.sh
 source "$OMARCHY_DEBIAN_ROOT/lib/map.sh"
+# shellcheck source=lib/target.sh
+source "$OMARCHY_DEBIAN_ROOT/lib/target.sh"
 
 export OMARCHY_DEBIAN_DRY_RUN=0
 export OMARCHY_DEBIAN_ASSUME_YES=0
@@ -38,6 +42,8 @@ export OMARCHY_DEBIAN_COMPOSITOR=auto
 export OMARCHY_DEBIAN_STRICT=0
 export OMARCHY_DEBIAN_PROFILE=${OMARCHY_DEBIAN_PROFILE:-none}
 PHASES=()
+CLI_USER=""
+CLI_THEME=""
 
 while (($#)); do
   case "$1" in
@@ -57,14 +63,35 @@ while (($#)); do
       shift
       OMARCHY_DEBIAN_PROFILE="${1:?--profile needs a value (quattro)}"
       ;;
+    --user)
+      shift
+      [[ $# -ge 1 ]] || die "--user needs a value (existing Linux account name)"
+      CLI_USER=$1 # explicit empty value = "not provided"
+      ;;
+    --theme)
+      shift
+      [[ $# -ge 1 ]] || die "--theme needs a value (e.g. tokyo-night)"
+      CLI_THEME=$1 # explicit empty value = "not provided"
+      ;;
     -h | --help)
-      sed -n '2,22p' "$0"
+      sed -n '2,24p' "$0"
       exit 0
       ;;
     *) die "unknown option: $1" ;;
   esac
   shift
 done
+
+# Resolve the target user and initial theme BEFORE any privilege escalation, so
+# a bad --user/--theme fails fast (before sudo authentication) and the prompts
+# are answered by the invoking human, not a root shell. Precedence:
+# CLI > environment > interactive prompt > safe unattended default.
+resolve_target_user "$CLI_USER"
+resolve_theme "$CLI_THEME"
+OMARCHY_THEME=$OMARCHY_THEME_SELECTED
+log "initial theme: $OMARCHY_THEME"
+export OMARCHY_TARGET_USER OMARCHY_TARGET_UID OMARCHY_TARGET_GID \
+  OMARCHY_TARGET_HOME OMARCHY_THEME
 
 if [[ $EUID -eq 0 ]]; then
   SUDO=""

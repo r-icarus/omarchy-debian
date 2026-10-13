@@ -59,7 +59,28 @@ cd omarchy-debian
 ./install.sh --no-desktop   # packages + dotfiles only
 ./install.sh --compositor sway
 ./install.sh --phases 10-apt-deps.sh,50-dotfiles.sh   # rerun selected phases
+./install.sh --profile quattro --user ricardo --theme tokyo-night
+OMARCHY_TARGET_USER=ricardo OMARCHY_THEME=tokyo-night ./install.sh --profile quattro
 ```
+
+### Target user + initial theme (quattro profile)
+
+- `--user <name>` / `OMARCHY_TARGET_USER` — which existing, non-root Linux
+  account receives the configuration. The target home is resolved with
+  `getent passwd` (custom home paths work; nothing assumes `/home/<name>`).
+  Nonexistent accounts and `root` are rejected.
+- `--theme <name>` / `OMARCHY_THEME` — the initial Quattro theme, validated
+  against the pinned quattro checkout (`OMARCHY_QUATTRO_REF`). Default:
+  `tokyo-night`.
+- Precedence: **CLI > environment > interactive prompt > safe unattended
+  default**. Interactively, omitted values are asked ("Which existing Linux
+  user should receive the Omarchy configuration?", "Which initial Quattro
+  theme?"). Unattended, the target defaults to a valid non-root `SUDO_USER`
+  when the installer runs as root, else the invoking user; the theme defaults
+  to `tokyo-night`.
+- All user configuration/state is deployed with target ownership even when
+  the installer runs through `sudo`; `omarchy-quattro-rollback` restores
+  pre-existing theme state (`~/.local/state/omarchy/current`) and configs.
 
 ### Safety / idempotence
 

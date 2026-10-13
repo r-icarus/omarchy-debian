@@ -1,5 +1,8 @@
 #!/bin/bash
 # Roll back the quattro profile's user-level changes:
+#   - restore ~/.local/state/omarchy/current from its .pre-omarchy backup
+#     (theme state: colors.toml, shell.toml, theme dir, theme.name, background
+#     symlink) or remove it when there was none,
 #   - restore ~/.config/omarchy/shell.json from its .pre-omarchy backup
 #     (or remove it when there was none),
 #   - remove the read-only quattro checkout clone,
@@ -7,13 +10,24 @@
 # Never touches the default omarchy checkout, installed packages, or anything
 # outside the user's home. Idempotent; prints exactly what it did.
 #
-# omarchy:summary=Undo the quattro Quickshell profile (configs + clone)
+# omarchy:summary=Undo the quattro Quickshell profile (configs + theme state + clone)
 
 set -euo pipefail
 
 say() { printf '%s\n' "$*"; }
 
-# 1. shell.json
+# 1. theme state (~/.local/state/omarchy/current)
+cur="$HOME/.local/state/omarchy/current"
+if [[ -d $cur.pre-omarchy ]]; then
+  rm -rf "$cur"
+  mv "$cur.pre-omarchy" "$cur"
+  say "restored $cur from backup"
+elif [[ -e $cur ]]; then
+  rm -rf "$cur"
+  say "removed $cur (no pre-omarchy backup existed)"
+fi
+
+# 2. shell.json
 dst="$HOME/.config/omarchy/shell.json"
 if [[ -f $dst.pre-omarchy ]]; then
   mv "$dst.pre-omarchy" "$dst"
@@ -23,14 +37,14 @@ elif [[ -f $dst ]]; then
   say "removed $dst (no pre-omarchy backup existed)"
 fi
 
-# 2. quattro checkout (read-only clone; safe to delete outright)
+# 3. quattro checkout (read-only clone; safe to delete outright)
 q="$HOME/.local/share/omarchy-quattro"
 if [[ -d $q ]]; then
   rm -rf "$q"
   say "removed $q"
 fi
 
-# 3. Hyprland config backup (created by the dotfiles phase on first deploy;
+# 4. Hyprland config backup (created by the dotfiles phase on first deploy;
 #    restoring it rolls the config back to its pre-omarchy-debian state).
 h="$HOME/.config/hypr/hyprland.conf"
 if [[ -f $h.pre-omarchy ]]; then
