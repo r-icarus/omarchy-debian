@@ -130,7 +130,26 @@ fi
 # up first; the whole step is idempotent.
 CURRENT_STATE="$TARGET_HOME/.local/state/omarchy/current"
 CURRENT_THEME_DIR="$CURRENT_STATE/theme"
+BUNDLED_THEMES_DIR="$OMARCHY_DEBIAN_ROOT/overlay/quattro/themes"
 THEME_SRC_DIR="$OMARCHY_QUATTRO_PATH/themes/$OMARCHY_THEME"
+if [[ ! -d $THEME_SRC_DIR && -d $BUNDLED_THEMES_DIR/$OMARCHY_THEME ]]; then
+  THEME_SRC_DIR="$BUNDLED_THEMES_DIR/$OMARCHY_THEME"
+fi
+
+# Make bundled third-party themes available in Omarchy's user theme picker.
+# User-owned files are preserved once as .pre-omarchy-debian before refresh.
+if [[ $DRY_RUN != "1" && -d $BUNDLED_THEMES_DIR ]]; then
+  while IFS= read -r -d '' src; do
+    rel="${src#"$BUNDLED_THEMES_DIR/"}"
+    dst="$TARGET_HOME/.config/omarchy/themes/$rel"
+    omd_install_dir "$(dirname "$dst")"
+    if [[ -f $dst ]] && ! cmp -s "$src" "$dst" && [[ ! -e $dst.pre-omarchy-debian ]]; then
+      cp -a "$dst" "$dst.pre-omarchy-debian"
+      omd_chown_path "$dst.pre-omarchy-debian"
+    fi
+    omd_install 644 "$src" "$dst"
+  done < <(find "$BUNDLED_THEMES_DIR" -type f -print0)
+fi
 
 init_theme_state() {
   if [[ ! -d $THEME_SRC_DIR ]]; then
@@ -153,7 +172,7 @@ init_theme_state() {
   rm -rf "$CURRENT_THEME_DIR"
   omd_install_dir "$CURRENT_THEME_DIR"
   local f
-  for f in colors.toml shell.toml; do
+  for f in colors.toml shell.toml chromium.theme; do
     [[ -f $THEME_SRC_DIR/$f ]] || continue
     omd_install 644 "$THEME_SRC_DIR/$f" "$CURRENT_THEME_DIR/$f"
   done

@@ -35,8 +35,9 @@ OMARCHY_TARGET_USER=ricardo OMARCHY_THEME=tokyo-night ./install.sh --profile qua
 - Theme initialization stages the Debian-safe subset of the genuine theme
   into `~/.local/state/omarchy/current/` (target-owned), mirroring upstream
   `omarchy-theme-set`: `theme/colors.toml`, `theme/shell.toml` when the theme
-  ships one, `theme/backgrounds/`, `theme.name`, and the relative
-  `background` symlink pointing at the theme's first image. Upstream hooks
+  ships one, `theme/chromium.theme` when shipped, `theme/backgrounds/`,
+  `theme.name`, and the relative `background` symlink pointing at the theme's
+  first image. Upstream hooks
   that assume Arch or mutate unrelated apps/packages (template retints,
   `omarchy-theme-set-*` app hooks, shell IPC) are **not** run.
 - All deployment is backup-first and idempotent: pre-existing
@@ -197,6 +198,14 @@ wallpaper, 2x HiDPI scale, natural scrolling. Issues hit and their fixes
    (an Arch convention). Debian's chromium reads `/etc/chromium.d/` instead —
    50-dotfiles installs `overlay/etc/chromium.d/omarchy-chromium.conf` (Wayland
    ozone, gnome-libsecret, overlay scrollbars, `--load-extension` pointing at
-   the checkout's copy-url / yt-dlp / whatsapp-slim). Theme following is pure
-   config: the profile's `browser.theme` Preferences keys make Chromium track
-   the system GTK color scheme the omarchy themes drive.
+   the checkout's copy-url / yt-dlp / whatsapp-slim). Omarchy tints Chromium
+   through its `chromium.theme` color plus a managed `BrowserThemeColor` policy;
+   themes without that file use upstream's `#1c2027` fallback. `BrowserColorScheme`
+   is rejected by this Debian Chromium build, so omit it from policy JSON.
+10. **Bundled Catppuccin Mocha theme**: the full theme from
+    `KidDogDad/omarchy-catppuccin-mocha-theme` is vendored with maintainer
+    permission under `overlay/quattro/themes/catppuccin-mocha/` (source commit
+    recorded in `SOURCE.txt`). 31-quattro-shell deploys it to
+    `~/.config/omarchy/themes/`, where the upstream theme picker discovers it.
+    `colors.toml` is generated from the supplied Alacritty palette; all original
+    app configs, Chromium color, and wallpapers are retained.

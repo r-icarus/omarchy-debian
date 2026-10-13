@@ -1,6 +1,3 @@
-diff --git a/default/hypr/cursors/omarchy-startup/cursors/left_ptr b/default/hypr/cursors/omarchy-startup/cursors/left_ptr
-index 42e2dc42..ba8c40be 100644
-Binary files a/default/hypr/cursors/omarchy-startup/cursors/left_ptr and b/default/hypr/cursors/omarchy-startup/cursors/left_ptr differ
 diff --git a/shell/plugins/background/Background.qml b/shell/plugins/background/Background.qml
 index a05f110c..e675ae94 100644
 --- a/shell/plugins/background/Background.qml
