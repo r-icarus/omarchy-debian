@@ -38,5 +38,5 @@ MOCK
 fi
 # Cached package checks should converge promptly after external apt upgrades.
 grep -Fq '+    interval: 60000' "$ROOT/patches/quattro-qml-compat.patch"
-grep -Fq '+    tooltipText: "Pending system updates (cached APT metadata)"' "$ROOT/patches/quattro-qml-compat.patch"
+grep -Fq '+    tooltipText: I18n.t("bar.pendingUpdates") + " (cached APT metadata)"' "$ROOT/patches/quattro-qml-compat.patch"
 echo 'bar helper tests passed'

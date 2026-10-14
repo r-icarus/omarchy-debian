@@ -209,6 +209,9 @@ git -C "$FQ" init -q -b quattro
 git -C "$FQ" add -A
 git -C "$FQ" -c user.email=test@test -c user.name=test commit -qm "themes"
 FQREF=$(git -C "$FQ" rev-parse HEAD)
+printf 'compat\n' >"$FQ/shell/qml"
+git -C "$FQ" diff >"$TMP/fixture.patch"
+git -C "$FQ" restore shell/qml
 
 # --- shims ---------------------------------------------------------------------
 cat >"$SHIM/sudo" <<'EOF'
@@ -264,6 +267,7 @@ run_install() { # <invoking-home> <install.sh args...> -> combined output
     FAKE_TARGET_GID="$(id -g "$TEST_USER")" FAKE_TARGET_HOME="$GT" \
     OMARCHY_QUATTRO_REPO="file://$FQ" \
     OMARCHY_QUATTRO_REF="$FQREF" \
+    OMARCHY_QUATTRO_COMPAT_PATCH="$TMP/fixture.patch" \
     OMARCHY_QUATTRO_PATH="$GT/.local/share/omarchy-quattro" \
     OMARCHY_DEBIAN_LOG_FILE="$h/install.log" \
     ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} \
@@ -279,6 +283,7 @@ run_phase31() { # <target-user> <theme> -> combined output; rc in PHASE_RC
     OMARCHY_DEBIAN_DRY_RUN=0 \
     OMARCHY_QUATTRO_REPO="file://$FQ" \
     OMARCHY_QUATTRO_REF="$FQREF" \
+    OMARCHY_QUATTRO_COMPAT_PATCH="$TMP/fixture.patch" \
     OMARCHY_QUATTRO_PATH="$GT/.local/share/omarchy-quattro" \
     OMARCHY_TARGET_USER="$1" \
     OMARCHY_THEME="$2" \
@@ -289,7 +294,7 @@ run_pty() { # <answers-file> <invoking-home> <args...>  (real pty via script)
   local answers=$1 h=$2 a
   local cmd="timeout 120 env -i PATH='$SHIM:$PATH' HOME='$h' TERM=xterm \
 FAKE_TARGET_USER='$TEST_USER' FAKE_TARGET_UID='$TEST_UID' FAKE_TARGET_GID='$(id -g "$TEST_USER")' FAKE_TARGET_HOME='$GT' \
-OMARCHY_QUATTRO_REPO='file://$FQ' OMARCHY_QUATTRO_REF='$FQREF' \
+OMARCHY_QUATTRO_REPO='file://$FQ' OMARCHY_QUATTRO_REF='$FQREF' OMARCHY_QUATTRO_COMPAT_PATCH='$TMP/fixture.patch' \
 OMARCHY_QUATTRO_PATH='$GT/.local/share/omarchy-quattro' \
 OMARCHY_DEBIAN_LOG_FILE='$h/install.log' bash '$ROOT/install.sh'"
   shift 2
@@ -573,6 +578,21 @@ if ((st == 0)) && ! grep -qi "which existing linux user" <<<"$out" &&
   pass "unattended run never prompts, deploys default theme"
 else
   bad "unattended run (exit $st, out: $(last3 "$out"))"
+fi
+
+# Upgrade reruns must retain the user's theme/background and complete config.
+clean_target
+run_phase31 "$TEST_USER" tokyo-night >/dev/null
+printf 'user selected theme\n' >"$CUR/theme.name"
+printf 'custom colors\n' >"$CUR/theme/colors.toml"
+ln -sfn 'theme/backgrounds/1-dusk.jpg' "$CUR/background"
+printf '{"version":1,"bar":{"custom":true},"dock":{"pinned":[]},"plugins":["mine"]}\n' >"$GT/.config/omarchy/shell.json"
+cp "$GT/.config/omarchy/shell.json" "$TMP/custom-shell.json"
+run_phase31 "$TEST_USER" gruvbox >/dev/null
+if [[ $(<"$CUR/theme.name") == 'user selected theme' && $(<"$CUR/theme/colors.toml") == 'custom colors' && $(readlink "$CUR/background") == 'theme/backgrounds/1-dusk.jpg' ]] && cmp -s "$TMP/custom-shell.json" "$GT/.config/omarchy/shell.json"; then
+  pass "upgrade preserves custom theme, wallpaper, dock, bar and plugins"
+else
+  bad "upgrade overwrote existing user settings"
 fi
 
 # --- docs ---------------------------------------------------------------------------

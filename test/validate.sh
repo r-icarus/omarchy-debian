@@ -68,6 +68,11 @@ else
   say "(shellcheck not installed — skipped)"
 fi
 
+say "== Quattro upgrade tests =="
+bash test/quattro-upgrade.sh || fail=1
+bash test/quattro-compat.sh || fail=1
+bash test/language.sh || fail=1
+
 say "== screensaver tests =="
 bash test/screensaver.sh || fail=1
 

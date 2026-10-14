@@ -7,9 +7,9 @@
 #   --theme <name> / OMARCHY_THEME        initial theme (default: tokyo-night)
 #
 # What this phase does:
-#   1. Clones omacom/omarchy branch `quattro` read-only at a pinned commit to
-#      $OMARCHY_QUATTRO_PATH (separate from the default/master checkout; the
-#      upstream tree is never modified).
+#   1. Fetches a pinned omacom/omarchy Quattro commit and applies the local
+#      compatibility patch to $OMARCHY_QUATTRO_PATH (separate from the main
+#      upstream checkout; the previous tree is preserved during upgrades).
 #   2. Initializes the Debian-safe subset of the selected theme — colors.toml,
 #      shell.toml when the theme ships one, the current theme directory/name,
 #      and the current background symlink — under the TARGET user's
@@ -22,10 +22,9 @@
 #      PPA *pool* — no third-party repository is ever added to the system.
 #      On PikaOS this means its repositories, kernel, Mesa/NVIDIA stack,
 #      bootloader, and updater stay untouched.
-#   4. Deploys a curated shell.json (backup-first) to the TARGET user's
-#      ~/.config/omarchy/ limiting the bar to widgets whose dependencies are
-#      satisfied by the quickshell binary itself (workspaces, active window,
-#      clock, tray, indicators via the clock/menu, audio via PipeWire).
+#   4. Deploys the full bar and Debian dock defaults on first install; preserves
+#      the TARGET user's existing widgets, clock zones, plugins and dock pins.
+#      Upgrades add dock defaults only when the dock key is absent.
 #
 # All user configuration/state is deployed with target ownership even when
 # this phase runs through sudo/root. Existing theme state is backed up first
@@ -41,6 +40,7 @@ source "$OMARCHY_DEBIAN_ROOT/lib/log.sh"
 source "$OMARCHY_DEBIAN_ROOT/lib/detect.sh"
 source "$OMARCHY_DEBIAN_ROOT/lib/apt.sh"
 source "$OMARCHY_DEBIAN_ROOT/lib/target.sh"
+source "$OMARCHY_DEBIAN_ROOT/lib/quattro.sh"
 
 if [[ ${OMARCHY_DEBIAN_PROFILE:-} != "quattro" ]]; then
   log "profile 'quattro' not selected — skipping native Quickshell bar (use ./install.sh --profile quattro)"
@@ -51,7 +51,7 @@ detect_distro
 
 # Pinned upstream ref (omacom/omarchy, branch `quattro`). Bump to track newer.
 : "${OMARCHY_QUATTRO_REPO:=https://github.com/omacom/omarchy.git}"
-: "${OMARCHY_QUATTRO_REF:=7e7a5600a3c989eb8658dd12409fa7e0479078bb}"
+: "${OMARCHY_QUATTRO_REF:=84cfb93959f4fe0bbb71de71593b36647d2ba78d}"
 : "${OMARCHY_QUATTRO_PATH:=${OMARCHY_TARGET_HOME:-$HOME}/.local/share/omarchy-quattro}"
 export OMARCHY_QUATTRO_PATH
 
@@ -68,45 +68,18 @@ if is_pikaos; then
   log "bootloader, and updater are never touched by this phase."
 fi
 
-# --- 1. pinned quattro checkout (read-only) -----------------------------------
+# --- 1. staged pinned checkout + verified compatibility patch -----------------
+# Never check out over a locally patched tree. Prepare a fresh sibling first;
+# preserve the entire previous checkout, including arbitrary user edits.
+PATCH="${OMARCHY_QUATTRO_COMPAT_PATCH:-$OMARCHY_DEBIAN_ROOT/patches/quattro-qml-compat.patch}"
 if [[ $DRY_RUN == "1" ]]; then
-  log "dry-run: clone $OMARCHY_QUATTRO_REPO (quattro@$OMARCHY_QUATTRO_REF) -> $OMARCHY_QUATTRO_PATH"
+  log "dry-run: stage $OMARCHY_QUATTRO_REPO (quattro@$OMARCHY_QUATTRO_REF), verify patch, preserve old checkout -> $OMARCHY_QUATTRO_PATH"
 else
-  if [[ ! -d $OMARCHY_QUATTRO_PATH/.git ]]; then
-    log "cloning upstream omarchy (quattro) -> $OMARCHY_QUATTRO_PATH"
-    omd_install_dir "$(dirname "$OMARCHY_QUATTRO_PATH")"
-    git clone --quiet --branch quattro "$OMARCHY_QUATTRO_REPO" "$OMARCHY_QUATTRO_PATH"
-    omd_chown_path "$OMARCHY_QUATTRO_PATH"
-  fi
-  (
-    cd "$OMARCHY_QUATTRO_PATH"
-    if [[ $(git rev-parse HEAD) != "$OMARCHY_QUATTRO_REF" ]]; then
-      log "checking out pinned quattro ref $OMARCHY_QUATTRO_REF"
-      git fetch --quiet --depth 1 origin "$OMARCHY_QUATTRO_REF" || git fetch --quiet origin quattro
-      git checkout --quiet "$OMARCHY_QUATTRO_REF"
-    fi
-    if ! git diff --quiet || ! git diff --cached --quiet; then
-      warn "$OMARCHY_QUATTRO_PATH has local modifications — the quattro tree must stay pristine."
-    fi
-  )
-  log "quattro checkout at $(git -C "$OMARCHY_QUATTRO_PATH" rev-parse --short HEAD)"
+  omd_quattro_prepare "$OMARCHY_QUATTRO_REPO" "$OMARCHY_QUATTRO_REF" "$OMARCHY_QUATTRO_PATH" "$PATCH"
 fi
 
-# --- 1b. Debian/PikaOS compatibility patches for the pinned quattro tree -----
-# The pinned quattro QML targets a newer quickshell than Debian/PikaOS ship
-# (0.3.2): its QML grammar treats `native` and `transient` as reserved tokens.
-# Rename those identifiers so the shell parses. Idempotent via git apply --check.
+# --- 1b. Debian/PikaOS cursor compatibility -----------------------------------
 if [[ $DRY_RUN != "1" ]]; then
-  PATCH="$OMARCHY_DEBIAN_ROOT/patches/quattro-qml-compat.patch"
-  if [[ -f $PATCH ]]; then
-    if git -C "$OMARCHY_QUATTRO_PATH" apply --check "$PATCH" 2>/dev/null; then
-      git -C "$OMARCHY_QUATTRO_PATH" apply "$PATCH"
-      log "applied quattro QML compat patch"
-    elif ! git -C "$OMARCHY_QUATTRO_PATH" diff --quiet; then
-      log "quattro tree already patched (or locally modified)"
-    fi
-  fi
-
   # PikaOS's Hyprland segfaults when a cursor shape fails to resolve: the
   # skeletal `omarchy-startup` blank-cursor theme (left_ptr only, no
   # index.theme) returns null cairo surfaces. Complete it from a full system
@@ -209,12 +182,17 @@ init_theme_state() {
 
 TMP_THEME_NAME=$(mktemp)
 TMP_THEME_MARKER=$(mktemp)
-trap 'rm -f "$TMP_THEME_NAME" "$TMP_THEME_MARKER"' EXIT
+TMP_SHELL_CONFIG=$(mktemp)
+trap 'rm -f "$TMP_THEME_NAME" "$TMP_THEME_MARKER" "$TMP_SHELL_CONFIG"' EXIT
 if [[ $DRY_RUN == "1" ]]; then
   log "dry-run: initialize theme '$OMARCHY_THEME' state -> $CURRENT_STATE"
 else
   omd_install_dir "$TARGET_HOME/.local/state/omarchy" "$TARGET_HOME/.config/omarchy"
-  init_theme_state
+  if [[ -f $CURRENT_STATE/.omarchy-debian-theme && -f $CURRENT_THEME_DIR/colors.toml ]]; then
+    log "preserving existing theme and background (use omarchy-theme-set to change them)"
+  else
+    init_theme_state
+  fi
 fi
 
 # --- 3. Quickshell runtime ------------------------------------------------------
@@ -301,6 +279,12 @@ if ! command -v gtk-launch >/dev/null 2>&1; then
   fi
 fi
 
+# Language switching uses glibc localedef, with system locale sources rather
+# than Arch's packaged Omarchy registry or passwordless root helpers.
+if [[ ! -r /usr/share/i18n/SUPPORTED ]] && apt_available locales; then
+  apt_install locales
+fi
+
 # The full upstream keyboard-layout picker discovers layouts through xkbcli.
 if ! command -v xkbcli >/dev/null 2>&1; then
   if apt_available libxkbcommon-tools; then
@@ -331,14 +315,18 @@ if [[ $DRY_RUN == "1" ]]; then
   log "dry-run: deploy $SHELL_JSON_SRC -> $SHELL_JSON_DST"
 else
   omd_install_dir "$TARGET_HOME/.local/state/omarchy/toggles"
-  if [[ -f $SHELL_JSON_DST ]] && cmp -s "$SHELL_JSON_SRC" "$SHELL_JSON_DST"; then
-    : # already ours — idempotent no-op
-  else
-    if [[ -f $SHELL_JSON_DST && ! -f $SHELL_JSON_DST.pre-omarchy ]]; then
-      cp -a "$SHELL_JSON_DST" "$SHELL_JSON_DST.pre-omarchy"
-      omd_chown_path "$SHELL_JSON_DST.pre-omarchy"
-      log "backed up $SHELL_JSON_DST -> $SHELL_JSON_DST.pre-omarchy"
+  if [[ -f $SHELL_JSON_DST ]]; then
+    python3 "$OMARCHY_DEBIAN_ROOT/lib/quattro-config.py" "$SHELL_JSON_DST" "$SHELL_JSON_SRC" >"$TMP_SHELL_CONFIG"
+    if ! cmp -s "$TMP_SHELL_CONFIG" "$SHELL_JSON_DST"; then
+      if [[ ! -e $SHELL_JSON_DST.pre-quattro-dock ]]; then
+        cp -a "$SHELL_JSON_DST" "$SHELL_JSON_DST.pre-quattro-dock"
+        omd_chown_path "$SHELL_JSON_DST.pre-quattro-dock"
+      fi
+      omd_install 644 "$TMP_SHELL_CONFIG" "$SHELL_JSON_DST"
+      log "added Debian dock defaults (existing settings preserved)"
     fi
+    log "preserving existing shell.json (bar, clock zones, dock and plugins)"
+  else
     omd_install 644 "$SHELL_JSON_SRC" "$SHELL_JSON_DST"
     log "deployed quattro bar layout -> $SHELL_JSON_DST"
   fi

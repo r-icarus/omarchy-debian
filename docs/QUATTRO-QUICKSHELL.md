@@ -9,7 +9,7 @@ imitation. It is opt-in:
 ./install.sh --profile quattro --dry-run  # resolve only, change nothing
 ./install.sh --profile quattro --user ricardo --theme tokyo-night
 OMARCHY_TARGET_USER=ricardo OMARCHY_THEME=tokyo-night ./install.sh --profile quattro
-./install.sh --phases 31-quattro-shell.sh # just the quattro phase
+./install.sh --profile quattro --phases 31-quattro-shell.sh # just the quattro phase
 ```
 
 ### Target user + initial theme
@@ -42,7 +42,8 @@ OMARCHY_TARGET_USER=ricardo OMARCHY_THEME=tokyo-night ./install.sh --profile qua
   `omarchy-theme-set-*` app hooks, shell IPC) are **not** run.
 - All deployment is backup-first and idempotent: pre-existing
   `~/.local/state/omarchy/current` is preserved once as `current.pre-omarchy`
-  before any change, and re-running only refreshes what differs. When the
+  before initial deployment. Re-running preserves the installed theme and
+  chosen wallpaper; use `omarchy-theme-set` to change them. When the
   installer runs through sudo/root, every deployed file/directory carries the
   target user's ownership.
 
@@ -56,10 +57,13 @@ OMARCHY_TARGET_USER=ricardo OMARCHY_THEME=tokyo-night ./install.sh --profile qua
    all other dependencies resolve from the distro's existing repositories.
    No pacman/yay anywhere; no third-party apt *repository* is added — the
    .debs come from direct, sha256-pinned pool file URLs.
-2. **Pinned quattro checkout, read-only.** Clones `omacom/omarchy` branch
-   `quattro` at a pinned commit to `~/.local/share/omarchy-quattro`
-   (separate from the default-branch checkout; never modified).
-   * Pin: `7e7a5600a3c989eb8658dd12409fa7e0479078bb` (`install/31-quattro-shell.sh`).
+2. **Pinned, compatibility-patched quattro checkout.** Stages upstream source
+   separately, verifies the compatibility patch, then deploys it to
+   `~/.local/share/omarchy-quattro`. Upgrades preserve the complete previous
+   checkout, including local edits, as `omarchy-quattro.pre-upgrade.*`.
+   Patch mismatches abort deployment; they are never silently ignored.
+   * Pin: `84cfb93959f4fe0bbb71de71593b36647d2ba78d` (`install/31-quattro-shell.sh`).
+   * See [upgrade notes and rollback](QUATTRO-UPGRADE.md).
 3. **Initial theme (Debian-safe subset).** The selected theme (default
    `tokyo-night`, see "Target user + initial theme" above) is validated
    against the pinned checkout and staged into the target user's
@@ -77,13 +81,11 @@ OMARCHY_TARGET_USER=ricardo OMARCHY_THEME=tokyo-night ./install.sh --profile qua
      needs, apt refuses and the phase reports it honestly and keeps waybar.
    - plus the QML runtime modules the bar imports (workerscript, layouts,
      controls, window, templates) from the distro repo.
-5. **Curated bar config** deployed to `~/.config/omarchy/shell.json`
-   (existing file backed up to `.pre-omarchy` first): workspaces, active
-   window, clock, tray — the widgets whose dependencies are satisfied by the
-   quickshell binary itself. Audio included (Quickshell.Services.Pipewire is
-   built in). Network/battery/bluetooth widgets are NOT enabled by default:
-   they need NetworkManager/UPower/BlueZ present and are left for explicit
-   enabling (see below).
+5. **Full upstream bar**, with Debian APT update detection and tuned-compatible
+   power profiles. Network/battery/bluetooth remain hardware-dependent.
+   New installs receive Debian dock pins (Nautilus, Chromium, Kitty).
+   Existing `shell.json` settings, clock zones and custom plugins are preserved;
+   only a missing `dock` key is added (backup: `.pre-quattro-dock`).
 6. **Session wiring** (`overlay/config/hypr/hyprland.conf`):
    `exec-once` runs `omarchy-quattro-launch` when present, else waybar.
    The launcher mirrors upstream `omarchy-launch-shell` (journal logging via
@@ -104,14 +106,13 @@ OMARCHY_TARGET_USER=ricardo OMARCHY_THEME=tokyo-night ./install.sh --profile qua
 | Binding presence in hyprland.conf | `test/quattro.sh` | passing (CI) |
 | Rollback + toggle helper behavior (fake HOME) | `test/quattro.sh` | passing (CI) |
 | Pinned .deb URLs + sha256 | captured 2026-10-13; phase verifies at install time | verified reachable |
-| quattro checkout pinned ref exists | fetched 2026-10-13 | verified |
-| **Bar actually rendering on PikaOS** | needs a real PikaOS graphical session | **not verified here** |
+| quattro checkout pinned ref exists | fetched 2026-10-14 | verified |
+| Staging, fatal patch mismatch, preservation and rollback | `test/quattro-upgrade.sh` | passing locally |
+| Patch applies to exact upstream pin | `test/quattro-compat.sh` with source fixture | passing locally |
+| Shell loading, IPC, panels, plugin reload and geometry | upstream runtime smoke test in nested Hyprland, PikaOS 4 / Quickshell 0.3.2 | passing locally |
 
-This host is not PikaOS and has no Wayland session for the shell: everything
-above the "rendering" line is static/unit validation only. First graphical
-check on target: log into the Omarchy (Debian) Hyprland session and confirm
-the bar renders (workspaces, active window, clock, tray), then
-`journalctl --user -t omarchy-quattro` if it does not.
+These checks do not replace a fresh-machine installation or lock/unlock test.
+See [upgrade notes](QUATTRO-UPGRADE.md) for the scope of live verification.
 
 ## Rollback
 
@@ -128,14 +129,11 @@ sudo apt-get remove quickshell libcpptrace   # optional: drop the runtime
 - **Lua Hyprland config**: upstream quattro configures Hyprland through its
   Lua API; this repo ships the classic-syntax config (works on every packaged
   Hyprland). Bindings listed above are ported, not the full upstream set.
-- **Upstream `omarchy-*` CLI surface** (omarchy-menu, omarchy bar …): those
-  helpers exist only inside the quattro checkout's `bin/`; they are on PATH
-  in the session (via the uwsm env) but untested on Debian/PikaOS. The bar
-  toggle uses the same flag protocol via `omarchy-quattro-bar-toggle`.
-- **Network/battery/bluetooth/weather widgets**: disabled pending dependency
-  proof on target (NetworkManager, UPower, BlueZ). Enable by editing
-  `~/.config/omarchy/shell.json` (ids: `omarchy.network`, `omarchy.power`,
-  `omarchy.bluetooth`, `omarchy.weather`).
+- **Upstream CLI breadth**: Debian adapters cover supported package/menu
+  actions; not every upstream helper has a real installation acceptance test.
+- **Hardware-dependent widgets** need NetworkManager, UPower, BlueZ and their
+  normal user-session permissions. They are enabled but may be unavailable on
+  machines without the corresponding hardware/services.
 - **quickshell on Debian 13/12 or Ubuntu 24.04**: the pinned 0.3.2 build
   needs Qt ≥ 6.10.2; older bases must build from source.
 
@@ -182,9 +180,9 @@ wallpaper, 2x HiDPI scale, natural scrolling. Issues hit and their fixes
    `config/hypr/*.lua` to `~/.config/hypr/`; it silences the legacy-conf
    deprecation advisory). Runtime `hyprctl keyword monitor`/`output scale`
    is a no-op on the pika build — set scale in `monitors.lua` and restart.
-6. **The quattro shell reads `~/.config/omarchy/shell.json`** — the curated
-   layout omits network/power/bluetooth. For the full default widget set,
-   copy the checkout's `config/omarchy/shell.json` instead.
+6. **The quattro shell reads `~/.config/omarchy/shell.json`** — the shipped
+   layout now contains the full upstream widget set. Do not overwrite an
+   existing file merely to upgrade; the installer preserves customizations.
 7. **Packages needed on PikaOS that the phases don't install**: kitty +
    xdg-terminal-exec (TERMINAL target), grim/slurp/nautilus (keybinds),
    inotify-tools (plugin hot-reload watcher).

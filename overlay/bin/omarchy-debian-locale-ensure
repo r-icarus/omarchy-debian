@@ -1,0 +1,26 @@
+#!/bin/bash
+# omarchy:summary=Generate a Debian glibc locale with explicit authentication
+# omarchy:hidden=true
+set -euo pipefail
+locale=${1:-}
+if (( $# != 1 )) || [[ ! $locale =~ ^[a-z]{2,3}_[A-Z]{2}\.UTF-8$ ]]; then
+  echo 'Usage: omarchy-debian-locale-ensure <xx_YY.UTF-8>' >&2
+  exit 1
+fi
+base=${locale%.UTF-8}
+if [[ ! -r /usr/share/i18n/locales/$base || ! -x /usr/bin/localedef ]]; then
+  echo 'Locale sources unavailable. Install the Debian locales package first: sudo apt install locales' >&2
+  exit 1
+fi
+# Elevate only the system binary with validated locale arguments. No root
+# helper reads the user-writable Omarchy checkout or installs a sudoers rule.
+# Keep the system locale archive untouched; glibc also discovers these
+# individual compiled locale directories through locale -a.
+args=(/usr/bin/localedef --no-archive -i "$base" -f UTF-8 "$locale")
+if (( EUID == 0 )); then
+  exec "${args[@]}"
+elif [[ -t 0 ]]; then
+  exec sudo -- "${args[@]}"
+else
+  exec pkexec "${args[@]}"
+fi

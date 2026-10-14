@@ -61,5 +61,9 @@
       ]
     }
   },
+  "dock": {
+    "position": "bottom",
+    "pinned": ["org.gnome.Nautilus", "chromium", "kitty"]
+  },
   "plugins": []
 }

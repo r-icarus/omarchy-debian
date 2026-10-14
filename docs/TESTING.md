@@ -18,6 +18,19 @@ git clone --depth 1 https://github.com/omacom/omarchy /tmp/omarchy
 OMARCHY_UPSTREAM_PKG_LIST=/tmp/omarchy/install/omarchy-base.packages ./test/validate.sh
 ```
 
+## Quattro upgrade checks
+
+```bash
+bash test/quattro.sh
+OMARCHY_QUATTRO_TEST_TREE=/path/to/quattro-at-the-pin bash test/validate.sh
+```
+
+Validation includes offline staged-upgrade/rollback, configuration-preservation
+and locale authentication-routing tests. The optional source fixture checks the
+actual compatibility patch without modifying that checkout. See
+[Quattro upgrade notes](QUATTRO-UPGRADE.md) for nested runtime coverage,
+remaining manual checks and live rollback precautions.
+
 ## Dry-run on a live system
 
 ```bash

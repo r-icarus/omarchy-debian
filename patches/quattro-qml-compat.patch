@@ -1,20 +1,27 @@
+diff --git a/bin/omarchy-language b/bin/omarchy-language
+index 411620a..6a82cad 100755
+--- a/bin/omarchy-language
++++ b/bin/omarchy-language
+@@ -88,6 +88,13 @@ generate_locale() {
+   local code=$1 locale=$2
+   locale_generated "$locale" && return
+
++  # Debian checkouts have no packaged /usr/share/omarchy registry. Elevate
++  # only the system localedef binary, never a helper from the user checkout.
++  if command -v omarchy-debian-locale-ensure >/dev/null 2>&1; then
++    omarchy-debian-locale-ensure "$locale"
++    return
++  fi
++
+   if (( EUID == 0 )); then
+     "$generator" "$code"
+   elif generator_is_passwordless "$code"; then
 diff --git a/shell/plugins/background/Background.qml b/shell/plugins/background/Background.qml
-index a05f110c..e675ae94 100644
+index a05f110..ce70a3a 100644
 --- a/shell/plugins/background/Background.qml
 +++ b/shell/plugins/background/Background.qml
-@@ -372,8 +372,8 @@ Item {
-       // screen. Stock wallpapers go up to 10456x3455 (144 MB as RGBA); a
-       // 1080p laptop paid all of that for the 8 MB it can display, and paid
-       // it up to three times over during a transition. The images wait for
--      // the window's size and the wallpaper's native size so nothing is ever
--      // decoded at native size first, and a wallpaper smaller than the screen
-+      // the window's size and the wallpaper's nativeSz size so nothing is ever
-+      // decoded at nativeSz size first, and a wallpaper smaller than the screen
-       // is decoded at its own size rather than scaled up to cover the screen.
-       readonly property bool sized: width > 0 && height > 0
-       readonly property int decodeWidth: sized ? Math.ceil(width * screen.devicePixelRatio) : 0
 @@ -381,9 +381,9 @@ Item {
- 
+
        function decodeSize(path) {
          if (!sized || !path) return Qt.size(0, 0)
 -        var native = root.nativeSizes[path]
@@ -25,69 +32,34 @@ index a05f110c..e675ae94 100644
 +        if (nativeSz.width > 0 && (nativeSz.width < decodeWidth || nativeSz.height < decodeHeight)) return Qt.size(nativeSz.width, nativeSz.height)
          return Qt.size(decodeWidth, decodeHeight)
        }
- 
-diff --git a/shell/plugins/bar/Bar.qml b/shell/plugins/bar/Bar.qml
-index 9cb72ec7..3fa9cb46 100644
---- a/shell/plugins/bar/Bar.qml
-+++ b/shell/plugins/bar/Bar.qml
-@@ -120,7 +120,7 @@ Item {
-   property var pluginBarApis: ({})
-   // target -> { target, pluginId, clickTarget, popout }. Keyed by object so a
-   // registration edits one entry in place instead of copying and rescanning an
--  // array in QML; Qt's Map still finds a key by a native linear scan.
-+  // array in QML; Qt's Map still finds a key by a nativeSz linear scan.
-   readonly property var pluginObjectOwners: new Map()
-   property bool pluginBarApiSyncQueued: false
- 
-@@ -2020,7 +2020,7 @@ Item {
-       // desktop — so it underlines a top bar, overlines a bottom one, and
-       // points inward from a left or right one. It reads as pointing at the
-       // panel that opens on that side.
--      // Snap toward the start of the slot, matching native glyph rendering.
-+      // Snap toward the start of the slot, matching nativeSz glyph rendering.
-       x: root.vertical
-         ? (root.position === "left" ? parent.width - width - inset : inset)
-         : Math.floor((parent.width - width) / 2)
-diff --git a/shell/plugins/lock/LockView.qml b/shell/plugins/lock/LockView.qml
-index ecec660c..33c9e013 100644
---- a/shell/plugins/lock/LockView.qml
-+++ b/shell/plugins/lock/LockView.qml
-@@ -107,7 +107,7 @@ Item {
-       path: root.loadBackground ? (root.video ? root.videoPosterPath : root.backgroundPath) : ""
-       version: root.backgroundVersion
-       // Decode only once sized, at the lock's own size: an unsized first
--      // request decoded the file at its native resolution, then again once
-+      // request decoded the file at its nativeSz resolution, then again once
-       // sized. That size is what the lock service keeps decoded ahead of the
-       // lock, so the first frame has the wallpaper.
-       cached: true
-diff --git a/shell/plugins/menu/Menu.qml b/shell/plugins/menu/Menu.qml
-index 8e3efe30..3fd09fca 100644
---- a/shell/plugins/menu/Menu.qml
-+++ b/shell/plugins/menu/Menu.qml
-@@ -299,7 +299,7 @@ Item {
-     return MenuModel.slugify(value)
+
+diff --git a/shell/plugins/bar/widgets/SystemUpdate.qml b/shell/plugins/bar/widgets/SystemUpdate.qml
+index 1d53d1d..8a727e6 100644
+--- a/shell/plugins/bar/widgets/SystemUpdate.qml
++++ b/shell/plugins/bar/widgets/SystemUpdate.qml
+@@ -45,7 +45,7 @@ BarWidget {
    }
- 
--  // The apps provider is QML-native: rows come from the shared AppLibrary
-+  // The apps provider is QML-nativeSz: rows come from the shared AppLibrary
-   // (DesktopEntries) instead of a bash enumeration, so they carry image
-   // icons, launch feedback, and uninstall support like the launcher.
-   function mergeAppRows() {
+
+   Timer {
+-    interval: 21600000
++    interval: 60000
+     running: true
+     repeat: true
+     triggeredOnStart: true
+@@ -58,7 +58,7 @@ BarWidget {
+     bar: root.bar
+     text: "\uf021"
+     slotSize: Style.bar.statusSlot
+-    tooltipText: I18n.t("bar.pendingUpdates")
++    tooltipText: I18n.t("bar.pendingUpdates") + " (cached APT metadata)"
+     onPressed: root.runUpdate()
+   }
+ }
 diff --git a/shell/plugins/notifications/Service.qml b/shell/plugins/notifications/Service.qml
-index a239b19f..87b157c2 100644
+index 5b8fa28..01da444 100644
 --- a/shell/plugins/notifications/Service.qml
 +++ b/shell/plugins/notifications/Service.qml
-@@ -140,7 +140,7 @@ Item {
-   }
- 
-   // A notification nobody looks back at:
--  //   - the freedesktop `transient` hint is set ("popup only, don't store")
-+  //   - the freedesktop `transientSz` hint is set ("popup only, don't store")
-   //   - app_name is "notify-send" (the CLI default — means the sender
-   //     didn't bother declaring an identity, so it's almost certainly
-   //     ephemeral test/feedback noise)
-@@ -150,11 +150,11 @@ Item {
+@@ -151,11 +151,11 @@ Item {
    // screen; the distinction only decides whether a DND-silenced one is worth
    // recording at all.
    function isEphemeral(notification) {
@@ -97,95 +69,14 @@ index a239b19f..87b157c2 100644
 -      transient = !!(notification.hints && notification.hints["transient"])
 -    } catch (e) { transient = false }
 -    return transient || NotificationLogic.isEphemeralApp(String(notification.appName || ""))
-+      transientSz = !!(notification.hints && notification.hints["transientSz"])
++      transientSz = !!(notification.hints && notification.hints["transient"])
 +    } catch (e) { transientSz = false }
 +    return transientSz || NotificationLogic.isEphemeralApp(String(notification.appName || ""))
    }
- 
+
    function handleNotification(notification) {
-diff --git a/shell/plugins/panels/elsewhen/ArcText.qml b/shell/plugins/panels/elsewhen/ArcText.qml
-index ae18e807..5f823035 100644
---- a/shell/plugins/panels/elsewhen/ArcText.qml
-+++ b/shell/plugins/panels/elsewhen/ArcText.qml
-@@ -65,7 +65,7 @@ Item {
-       color: root.color
-       font.family: root.fontFamily
-       font.pixelSize: root.pixelSize
--      renderType: Text.QtRendering  // native rendering ignores the rotation
-+      renderType: Text.QtRendering  // nativeSz rendering ignores the rotation
-     }
-   }
- }
-diff --git a/shell/plugins/panels/network/Panel.qml b/shell/plugins/panels/network/Panel.qml
-index aa7aa242..138f3788 100644
---- a/shell/plugins/panels/network/Panel.qml
-+++ b/shell/plugins/panels/network/Panel.qml
-@@ -436,7 +436,7 @@ Panel {
-     connectDirectly(net.ssid)
-   }
- 
--  // Bar pill state, derived from the native NetworkManager service so the
-+  // Bar pill state, derived from the nativeSz NetworkManager service so the
-   // icon reflects connection changes without polling. Wired is preferred
-   // when both are up, matching the default-route device.
-   readonly property var wiredDevice: findDevice(DeviceType.Wired)
-@@ -496,7 +496,7 @@ Panel {
-   }
- 
-   // NetworkManager performs the HTTP probe (including unexpected page bodies,
--  // not just redirects). Consume its native notifications rather than running
-+  // not just redirects). Consume its nativeSz notifications rather than running
-   // a second curl loop or mistaking an ordinary timeout for a captive portal.
-   readonly property bool connectivityChecksEnabled: networkManagerAvailable
-     && Networking.canCheckConnectivity && Networking.connectivityCheckEnabled
-diff --git a/shell/plugins/panels/power/Panel.qml b/shell/plugins/panels/power/Panel.qml
-index 4ed3940b..3e10f613 100644
---- a/shell/plugins/panels/power/Panel.qml
-+++ b/shell/plugins/panels/power/Panel.qml
-@@ -153,7 +153,7 @@ Panel {
-   function updateProfiles(raw) {
-     var parsed = Model.parseProfiles(raw, profileIndex)
-     // Same guard as battery: preserve the last known profile list across
--    // transient empty payloads so the buttons don't blink out.
-+    // transientSz empty payloads so the buttons don't blink out.
-     if (parsed.profiles.length === 0) return
-     profiles = parsed.profiles
-     activeProfile = parsed.activeProfile
-diff --git a/shell/plugins/panels/wifiqr/Panel.qml b/shell/plugins/panels/wifiqr/Panel.qml
-index 1fdf4dec..856f9463 100644
---- a/shell/plugins/panels/wifiqr/Panel.qml
-+++ b/shell/plugins/panels/wifiqr/Panel.qml
-@@ -265,7 +265,7 @@ Item {
-             horizontalAlignment: Text.AlignHCenter
-           }
- 
--          // Render every QR module as an integer-sized native rectangle. This
-+          // Render every QR module as an integer-sized nativeSz rectangle. This
-           // stays crisp and avoids temporary images and file-cache races. Only
-           // the dark modules paint, so the white canvas can keep its rounded
-           // corners; the spec quiet zone baked into the matrix keeps the code
-diff --git a/shell/plugins/bar/widgets/SystemUpdate.qml b/shell/plugins/bar/widgets/SystemUpdate.qml
---- a/shell/plugins/bar/widgets/SystemUpdate.qml
-+++ b/shell/plugins/bar/widgets/SystemUpdate.qml
-@@ -47,6 +47,6 @@ BarWidget {
-   Timer {
--    interval: 21600000
-+    interval: 60000
-     running: true
-     repeat: true
-     triggeredOnStart: true
-     onTriggered: root.refresh()
-@@ -58,7 +58,7 @@ BarWidget {
-     bar: root.bar
-     text: "\uf021"
-     slotSize: Style.bar.statusSlot
--    tooltipText: "Pending Omarchy Updates"
-+    tooltipText: "Pending system updates (cached APT metadata)"
-     onPressed: root.runUpdate()
-   }
- }
 diff --git a/shell/services/BackgroundIntro.qml b/shell/services/BackgroundIntro.qml
-index a2530b8e..0667c316 100644
+index a2530b8..0667c31 100644
 --- a/shell/services/BackgroundIntro.qml
 +++ b/shell/services/BackgroundIntro.qml
 @@ -300,14 +300,14 @@ Item {
@@ -204,5 +95,36 @@ index a2530b8e..0667c316 100644
 -        onStatusChanged: panel.coverFrames = 0
 +        onStatusChanged: { panel.coverFrames = 0 }
        }
- 
+
        // Give the ready image a frame to reach the compositor before OWE
+diff --git a/shell/shell.qml b/shell/shell.qml
+index a3c5b1f..3ea9050 100644
+--- a/shell/shell.qml
++++ b/shell/shell.qml
+@@ -126,6 +126,8 @@ ShellRoot {
+   FileView {
+     id: defaultsFile
+     path: shell.defaultsPath
++    // Read canonical settings before plugins can persist first-run defaults.
++    blockLoading: true
+     watchChanges: true
+     printErrors: false
+     onLoaded: shell.loadDefaults(text())
+@@ -139,6 +141,7 @@ ShellRoot {
+   FileView {
+     id: userConfigFile
+     path: shell.userConfigPath
++    blockLoading: true
+     watchChanges: true
+     atomicWrites: true
+     printErrors: false
+@@ -148,6 +151,9 @@ ShellRoot {
+   }
+
+   Component.onCompleted: {
++    // Initialize canonical config before registering plugins. Otherwise a
++    // default Elsewhen instance can persist seed cities over the user's file.
++    shell.loadDefaults(defaultsFile.text())
+     console.log("omarchy-shell paths",
+       "omarchyPath=" + shell.omarchyPath,
+       "shellDir=" + Quickshell.shellDir,
