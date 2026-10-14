@@ -1,0 +1,25 @@
+#!/bin/bash
+# omarchy:summary=Launch a floating terminal with explicit Omarchy presentation paths.
+# omarchy:args=<command>
+
+set -uo pipefail
+
+if (($# == 0)); then
+  echo "Usage: omarchy-launch-floating-terminal-with-presentation <command> [args...]" >&2
+  exit 2
+fi
+
+omarchy_path=${OMARCHY_PATH:-$HOME/.local/share/omarchy}
+if [[ -r $omarchy_path/bin/omarchy-restart-gum ]]; then
+  # shellcheck source=/dev/null
+  source "$omarchy_path/bin/omarchy-restart-gum"
+fi
+
+cmd="$*"
+logo="$omarchy_path/bin/omarchy-show-logo"
+done="$omarchy_path/bin/omarchy-show-done"
+presentation_script="\"$logo\"; $cmd; code=\$?; if (( code != 130 )); then \"$done\" \$code; fi"
+
+exec setsid uwsm-app -- xdg-terminal-exec \
+  --app-id=org.omarchy.terminal --title=Omarchy \
+  -e bash -c "$presentation_script"

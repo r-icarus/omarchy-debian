@@ -68,6 +68,15 @@ fi
 deploy_tree "$OVERLAY/config" "$HOME/.config"
 deploy_tree "$OVERLAY/uwsm" "$HOME/.config/uwsm"
 
+# PikaOS's hyprland package postinst deletes /usr/share/wayland-sessions/
+# hyprland.desktop (it ships pika-hyprland instead), which breaks
+# `uwsm start -e -D Hyprland hyprland.desktop`. Provide it at the user level
+# (uwsm searches ~/.local/share/wayland-sessions) so the session resolves.
+if command -v Hyprland >/dev/null 2>&1 && [[ ! -f /usr/share/wayland-sessions/hyprland.desktop ]]; then
+  deploy_file "$OVERLAY/wayland-sessions/hyprland-user.desktop" \
+    "$HOME/.local/share/wayland-sessions/hyprland.desktop"
+fi
+
 # --- 3. system-level overlay files -------------------------------------------
 if [[ $DRY_RUN != "1" ]]; then
   for f in "$OVERLAY"/wayland-sessions/*.desktop; do
@@ -77,6 +86,13 @@ if [[ $DRY_RUN != "1" ]]; then
   for f in "$OVERLAY"/environment.d/*.conf; do
     [[ -f $f ]] || continue
     $SUDO install -Dm644 "$f" "/etc/environment.d/$(basename "$f")"
+  done
+  # Chromium flags: Debian's chromium reads /etc/chromium.d (not Arch's
+  # ~/.config/chromium-flags.conf). Wayland, system theme store, and the
+  # omarchy checkout's bundled extensions.
+  for f in "$OVERLAY"/etc/chromium.d/*.conf; do
+    [[ -f $f ]] || continue
+    $SUDO install -Dm644 "$f" "/etc/chromium.d/$(basename "$f")"
   done
   for f in "$OVERLAY"/sddm.conf.d/*.conf; do
     [[ -f $f ]] || continue
@@ -104,10 +120,21 @@ if [[ $DRY_RUN == "1" ]]; then
   log "dry-run: add omarchy block to ~/.bashrc"
 else
   touch "$HOME/.bashrc"
-  if ! grep -qF "$MARKER" "$HOME/.bashrc"; then
-    printf '\n%s\n' "$BASHRC_SNIPPET" >>"$HOME/.bashrc"
-    log "added omarchy block to ~/.bashrc"
+  # Refresh our managed block on upgrades while preserving user customizations.
+  # Back up before changing the file; never source the user's shell during install.
+  bashrc_tmp=$(mktemp)
+  awk '
+    $0 == "# >>> omarchy-debian >>>" { managed=1; next }
+    $0 == "# <<< omarchy-debian <<<" { managed=0; next }
+    !managed { print }
+  ' "$HOME/.bashrc" >"$bashrc_tmp"
+  printf '%s\n' "$BASHRC_SNIPPET" >>"$bashrc_tmp"
+  if ! cmp -s "$bashrc_tmp" "$HOME/.bashrc"; then
+    [[ -f $HOME/.bashrc.pre-omarchy ]] || cp -a "$HOME/.bashrc" "$HOME/.bashrc.pre-omarchy"
+    cp "$bashrc_tmp" "$HOME/.bashrc"
+    log "updated omarchy block in ~/.bashrc"
   fi
+  rm -f "$bashrc_tmp"
 fi
 
 # --- 5. state dirs -------------------------------------------------------------

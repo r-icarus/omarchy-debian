@@ -3,6 +3,8 @@
 
 export OMARCHY_PATH="${OMARCHY_PATH:-$HOME/.local/share/omarchy}"
 export OMARCHY_DEBIAN_PATH="${OMARCHY_DEBIAN_PATH:-$HOME/.local/share/omarchy-debian}"
+# Quattro profile checkout (no-op when the profile was not installed).
+export OMARCHY_QUATTRO_PATH="${OMARCHY_QUATTRO_PATH:-$HOME/.local/share/omarchy-quattro}"
 
 # Overlay bin first (apt-backed omarchy-pkg-* shims), then upstream bin.
 PATH="$OMARCHY_DEBIAN_PATH/overlay/bin:$OMARCHY_PATH/bin:$HOME/.local/bin:$PATH"
@@ -10,5 +12,12 @@ export PATH
 
 export TERMINAL=xdg-terminal-exec
 export EDITOR=nvim
+
+# Cursor theme. PikaOS's `default` cursor theme is a self-inheriting Adwaita
+# alias that can return null surfaces; give the quattro startup-cursor reveal
+# a complete theme. Inherit any explicit user preference first.
+export XCURSOR_THEME="${XCURSOR_THEME:-Bibata-Modern-Classic}"
+export HYPRCURSOR_THEME="${HYPRCURSOR_THEME:-Bibata-Modern-Classic}"
+export XCURSOR_SIZE="${XCURSOR_SIZE:-24}"
 
 [ -f "$HOME/.config/uwsm/default" ] && . "$HOME/.config/uwsm/default"

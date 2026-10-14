@@ -17,6 +17,11 @@ This repository contains **no upstream code**. It is an install layer that:
 5. Deploys dotfiles, a classic-syntax Hyprland config, session entries, and
    enables the services upstream enables.
 
+Optional profile: `./install.sh --profile quattro` installs the **native
+Omarchy Quattro Quickshell top bar** (pinned upstream quattro checkout +
+Quickshell runtime) — see [docs/QUATTRO-QUICKSHELL.md](docs/QUATTRO-QUICKSHELL.md).
+PikaOS is supported without touching its kernel/driver/updater stack.
+
 Upstream reference commit: `9c5482c` (bump `OMARCHY_UPSTREAM_REF` in
 `install/30-upstream.sh` to track newer).
 
@@ -54,7 +59,28 @@ cd omarchy-debian
 ./install.sh --no-desktop   # packages + dotfiles only
 ./install.sh --compositor sway
 ./install.sh --phases 10-apt-deps.sh,50-dotfiles.sh   # rerun selected phases
+./install.sh --profile quattro --user ricardo --theme tokyo-night
+OMARCHY_TARGET_USER=ricardo OMARCHY_THEME=tokyo-night ./install.sh --profile quattro
 ```
+
+### Target user + initial theme (quattro profile)
+
+- `--user <name>` / `OMARCHY_TARGET_USER` — which existing, non-root Linux
+  account receives the configuration. The target home is resolved with
+  `getent passwd` (custom home paths work; nothing assumes `/home/<name>`).
+  Nonexistent accounts and `root` are rejected.
+- `--theme <name>` / `OMARCHY_THEME` — the initial Quattro theme, validated
+  against the pinned quattro checkout (`OMARCHY_QUATTRO_REF`). Default:
+  `tokyo-night`.
+- Precedence: **CLI > environment > interactive prompt > safe unattended
+  default**. Interactively, omitted values are asked ("Which existing Linux
+  user should receive the Omarchy configuration?", "Which initial Quattro
+  theme?"). Unattended, the target defaults to a valid non-root `SUDO_USER`
+  when the installer runs as root, else the invoking user; the theme defaults
+  to `tokyo-night`.
+- All user configuration/state is deployed with target ownership even when
+  the installer runs through `sudo`; `omarchy-quattro-rollback` restores
+  pre-existing theme state (`~/.local/state/omarchy/current`) and configs.
 
 ### Safety / idempotence
 
@@ -100,6 +126,44 @@ fuzzel + mako** as the session stack. Boot-stack items (limine, mkinitcpio,
 snapper sync, plymouth theme) are not ported.
 
 Things a human still has to do: **[docs/MANUAL-STEPS.md](docs/MANUAL-STEPS.md)**.
+
+## Screensaver
+
+Run `omarchy-install-screensaver` as your desktop user to build upstream
+`omacom/ttfx` v0.5.0 at a pinned commit with locked Cargo dependencies.
+Missing Rust/build tools are installed through apt (sudo required); the binary
+is installed under `~/.local/bin`. Missing branding is initialized from the
+upstream logo without overwriting custom text. Preview with
+`omarchy-launch-screensaver force`. This animation is **not a screen lock**.
+
+## Bash prompt
+
+The dotfiles phase sources upstream `default/bash/rc` from a managed block in
+`~/.bashrc` and deploys upstream `config/starship.toml` to `~/.config/starship.toml`.
+This enables Omarchy's directory/Git prompt, aliases, completions, mise, and
+zoxide where installed. Debian overlay commands stay first in PATH. Existing
+custom Bash settings are preserved, with a backup before updating the managed
+block. Open a new Bash terminal after deployment to activate it.
+
+## Package helper and installer menus
+
+The Debian `omarchy-pkg-add` resolves upstream package names through
+`packages/*.map`, falls back to exact apt package names, skips installed
+packages, and verifies the result. It also accepts local `.deb` files so apt
+can resolve their dependencies. It fails clearly for unavailable or
+manual-only names instead of passing an AUR name to apt.
+
+The AI menu uses official Linux package paths for ChatGPT, Claude Desktop,
+Grok Bot, LM Studio, and T3 Code. Claude uses Anthropic's apt repository;
+ChatGPT, Grok Bot, and LM Studio use vendor `.deb` downloads; T3 Code's latest
+GitHub `.deb` is checked against its published SHA-256 digest. CLI/script-based
+AI entries are hidden for now; Perplexity's separate Portable Computer product
+is also hidden because it is not a drop-in for the upstream menu entry. The
+Development → PHP → Symfony action adds Symfony's official Cloudsmith APT
+source only when selected, then installs the CLI through apt. The PHP removal
+path maps legacy package names to Debian packages and skips packages not installed.
+The Development DB action prefers rootless Podman on PikaOS and enables its
+user restart unit without starting unrelated containers.
 
 ## Validation
 

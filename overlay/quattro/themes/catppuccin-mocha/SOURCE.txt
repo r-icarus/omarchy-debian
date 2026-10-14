@@ -1,0 +1,3 @@
+Source: https://github.com/KidDogDad/omarchy-catppuccin-mocha-theme
+Upstream commit: 348e6a0835930e0c37ea411570b54ebe5c0f237d
+Vendored with maintainer permission.

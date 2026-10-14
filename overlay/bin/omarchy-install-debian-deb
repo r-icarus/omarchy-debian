@@ -1,0 +1,47 @@
+#!/bin/bash
+# omarchy:summary=Download, verify, and install a vendor-provided Debian package.
+# omarchy:args=<https-url> [sha256]
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+url=${1:-}
+expected_sha=${2:-}
+if [[ -z $url || $url != https://* ]]; then
+  echo "Usage: omarchy-install-debian-deb <https-url> [sha256]" >&2
+  exit 2
+fi
+
+command -v curl >/dev/null 2>&1 || { echo "Error: curl is required." >&2; exit 1; }
+command -v dpkg-deb >/dev/null 2>&1 || { echo "Error: dpkg-deb is required." >&2; exit 1; }
+
+deb=$(mktemp --suffix=.deb)
+trap 'rm -f "$deb"' EXIT
+curl --fail --location --silent --show-error \
+  --proto '=https' --proto-redir '=https' "$url" -o "$deb"
+
+if [[ -n $expected_sha ]]; then
+  expected_sha=${expected_sha#sha256:}
+  if [[ ! $expected_sha =~ ^[[:xdigit:]]{64}$ ]]; then
+    echo "Error: invalid SHA-256 digest supplied for package." >&2
+    exit 1
+  fi
+  printf '%s  %s\n' "$expected_sha" "$deb" | sha256sum --check --status || {
+    echo "Error: downloaded Debian package failed SHA-256 verification." >&2
+    exit 1
+  }
+fi
+
+pkg=$(dpkg-deb -f "$deb" Package 2>/dev/null) || {
+  echo "Error: vendor download was not a valid Debian package." >&2
+  exit 1
+}
+pkg_arch=$(dpkg-deb -f "$deb" Architecture 2>/dev/null)
+system_arch=$(dpkg --print-architecture)
+if [[ $pkg_arch != all && $pkg_arch != "$system_arch" ]]; then
+  echo "Error: $pkg package architecture is $pkg_arch; this system is $system_arch." >&2
+  exit 1
+fi
+
+printf 'Installing %s (%s) from the vendor package…\n' "$pkg" "$(dpkg-deb -f "$deb" Version)"
+omarchy-pkg-add "$deb"

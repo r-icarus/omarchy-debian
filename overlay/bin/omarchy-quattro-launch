@@ -1,0 +1,88 @@
+#!/bin/bash
+# Launch the native Omarchy Quattro shell (Quickshell) the way upstream's
+# omarchy-launch-shell does, but pointed at the pinned quattro checkout.
+#
+# Supervised relaunch loop adapted from upstream bin/omarchy-launch-shell
+# (omacom/omarchy, quattro@7e7a5600): systemd-cat journal logging, QS env
+# flags, bounded restarts, and a compositor-alive check so a session that is
+# tearing down stops the loop instead of burning the attempt budget.
+#
+# omarchy:summary=Launch the Omarchy Quattro Quickshell (bar) for this session
+# omarchy:hidden=true
+
+set -uo pipefail
+
+OMARCHY_QUATTRO_PATH="${OMARCHY_QUATTRO_PATH:-$HOME/.local/share/omarchy-quattro}"
+export OMARCHY_PATH="${OMARCHY_PATH:-$HOME/.local/share/omarchy}"
+export OMARCHY_DEBIAN_PATH="${OMARCHY_DEBIAN_PATH:-$HOME/.local/share/omarchy-debian}"
+# Direct QML Process launches must resolve Debian adapters before upstream.
+export PATH="$OMARCHY_DEBIAN_PATH/overlay/bin:$OMARCHY_PATH/bin:$HOME/.local/bin:$PATH"
+
+[[ -d $OMARCHY_QUATTRO_PATH/shell ]] || {
+  echo "omarchy-quattro-launch: $OMARCHY_QUATTRO_PATH/shell not found (run the quattro profile)" >&2
+  exit 1
+}
+command -v quickshell >/dev/null || {
+  echo "omarchy-quattro-launch: quickshell not installed" >&2
+  exit 1
+}
+
+run_shell() {
+  local startup_background
+  startup_background=$(readlink -f "$HOME/.local/state/omarchy/current/background" 2>/dev/null)
+  OMARCHY_STARTUP_BACKGROUND="$startup_background" \
+    QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1 \
+    systemd-cat -t omarchy-quattro -- quickshell -n -p "$OMARCHY_QUATTRO_PATH/shell" &
+  shell_pid=$!
+
+  local status
+  while true; do
+    wait "$shell_pid"
+    status=$?
+    kill -0 "$shell_pid" 2>/dev/null || break
+  done
+  shell_pid=""
+  return $status
+}
+
+compositor_alive() {
+  local attempt
+  for attempt in 1 2 3; do
+    hyprctl -j monitors >/dev/null 2>&1 && return 0
+    ((attempt < 3)) && sleep 0.5
+  done
+  return 1
+}
+
+terminating=0
+shell_pid=""
+
+stop() {
+  terminating=1
+  [[ -n $shell_pid ]] && kill -TERM "$shell_pid" 2>/dev/null
+  return 0
+}
+trap stop HUP INT TERM
+
+attempts=0
+window_started=$SECONDS
+
+while true; do
+  ((terminating)) && exit 0
+  run_shell
+  status=$?
+  ((terminating)) && exit 0
+  ((status == 0)) && exit 0
+  compositor_alive || exit 0
+
+  if ((SECONDS - window_started > 60)); then
+    attempts=0
+    window_started=$SECONDS
+  fi
+  if ((++attempts > 5)); then
+    logger -t omarchy-quattro "Giving up on the Quattro shell after $attempts relaunches in under a minute."
+    exit 1
+  fi
+  logger -t omarchy-quattro "Quattro shell exited with status $status; relaunching."
+  sleep 1
+done

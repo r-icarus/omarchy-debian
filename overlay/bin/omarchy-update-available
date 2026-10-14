@@ -1,0 +1,12 @@
+#!/bin/bash
+# omarchy:summary=Check cached APT metadata for available system updates.
+# No refresh, Git fetch, privilege escalation, or upstream-checkout updates.
+set -euo pipefail
+updates=$(apt list --upgradable 2>/dev/null) || exit 2
+updates=$(printf '%s\n' "$updates" | awk 'index($0, "/") && /\[upgradable from:/')
+if [[ -n $updates ]]; then
+  printf '%s\n' "$updates"
+  exit 0
+fi
+echo 'System packages are up to date (cached APT metadata)'
+exit 1

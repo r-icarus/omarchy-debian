@@ -1,0 +1,22 @@
+#!/bin/bash
+# omarchy:summary=Install a supported development environment (Debian wrapper).
+# omarchy:name=dev-env
+# omarchy:args=<ruby|node|bun|deno|go|laravel|symfony|php|python|elixir|phoenix|rust|java|zig|ocaml|dotnet|clojure|scala>
+# omarchy:examples=omarchy install dev-env ruby | omarchy install dev-env node
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+if [[ ${1:-} == symfony ]]; then
+  # Symfony CLI is not in the configured Debian/PikaOS apt indexes. Add the
+  # vendor's signed APT source only when the user explicitly selects Symfony.
+  omarchy-install-symfony-cli-repo
+fi
+
+upstream=${OMARCHY_PATH:-$HOME/.local/share/omarchy}
+installer=$upstream/bin/omarchy-install-dev-env
+if [[ ! -x $installer ]]; then
+  echo "Error: upstream development installer not found at $installer." >&2
+  exit 1
+fi
+exec "$installer" "$@"

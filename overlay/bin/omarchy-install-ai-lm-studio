@@ -1,0 +1,16 @@
+#!/bin/bash
+# omarchy:summary=Install LM Studio from the official Debian download.
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+if ! omarchy-pkg-present lm-studio; then
+  case $(dpkg --print-architecture) in
+    amd64) ;;
+    *) echo "LM Studio's official Debian download is currently only published for amd64." >&2; exit 1 ;;
+  esac
+  omarchy-install-debian-deb \
+    'https://www.lmstudio.ai/download/latest/linux/x64?format=deb'
+fi
+
+echo "LM Studio has been installed."

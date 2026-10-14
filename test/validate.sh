@@ -68,6 +68,28 @@ else
   say "(shellcheck not installed — skipped)"
 fi
 
+say "== screensaver tests =="
+bash test/screensaver.sh || fail=1
+
+say "== bar helper tests =="
+bash test/bar-helpers.sh || fail=1
+
+say "== Bash startup tests =="
+bash test/bash-startup.sh || fail=1
+
+say "== package helper tests =="
+if bash test/pkg-add.sh; then
+  :
+else
+  fail=1
+fi
+say "== development menu tests =="
+if bash test/dev-env.sh && bash test/remove-dev-env.sh && bash test/container-dbs.sh; then
+  :
+else
+  fail=1
+fi
+
 if ((fail)); then
   say "VALIDATION FAILED"
   exit 1

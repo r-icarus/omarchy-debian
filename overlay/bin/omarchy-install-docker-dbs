@@ -1,0 +1,143 @@
+#!/bin/bash
+# omarchy:summary=Run a local development database in Podman or Docker.
+# omarchy:args=[MySQL|PostgreSQL|Redis|MongoDB|MariaDB|MSSQL]...
+
+set -euo pipefail
+
+options=("MySQL" "PostgreSQL" "Redis" "MongoDB" "MariaDB" "MSSQL")
+selected=()
+
+if (($#)); then
+  selected=("$@")
+else
+  command -v gum >/dev/null 2>&1 || {
+    echo "Error: gum is required to choose a database." >&2
+    exit 1
+  }
+  if choices=$(printf '%s\n' "${options[@]}" | gum choose --header "Select database (enter to run, esc to cancel)"); then
+    :
+  else
+    status=$?
+    if ((status == 130)); then
+      echo "Database selection cancelled."
+      exit 0
+    fi
+    echo "Error: database selection failed (gum exited $status)." >&2
+    exit "$status"
+  fi
+  [[ -n $choices ]] || { echo "No database selected."; exit 0; }
+  mapfile -t selected <<<"$choices"
+fi
+
+for db in "${selected[@]}"; do
+  case "$db" in
+    MySQL | PostgreSQL | Redis | MongoDB | MariaDB | MSSQL) ;;
+    *) echo "Error: unsupported database '$db'." >&2; exit 2 ;;
+  esac
+done
+
+if command -v podman >/dev/null 2>&1; then
+  engine=podman
+elif command -v docker >/dev/null 2>&1; then
+  engine=docker
+else
+  echo "Error: neither Podman nor Docker is installed. Install Podman to use this menu entry." >&2
+  exit 1
+fi
+
+engine_cmd() {
+  if [[ $engine == docker && $EUID -ne 0 ]]; then
+    sudo docker "$@"
+  else
+    "$engine" "$@"
+  fi
+}
+
+if [[ $engine == podman ]]; then
+  rootless=$(podman info --format '{{.Host.Security.Rootless}}') || {
+    echo "Error: Podman could not initialize its container store." >&2
+    exit 1
+  }
+  if [[ $rootless != true ]]; then
+    echo "Error: this installer expects rootless Podman; refusing to create root-owned database containers." >&2
+    exit 1
+  fi
+
+  # Rootless Podman uses pasta for its default network. Debian packages that
+  # helper as `passt`; install it only on first use, when the user selected a DB.
+  if ! command -v pasta >/dev/null 2>&1; then
+    pkg_add=${OMARCHY_DEBIAN_PATH:-}/overlay/bin/omarchy-pkg-add
+    if [[ ! -x $pkg_add ]]; then
+      echo "Error: rootless Podman needs pasta (Debian package: passt), but the Debian package helper is unavailable." >&2
+      exit 1
+    fi
+    echo "Installing Podman's rootless network helper (passt)..."
+    "$pkg_add" passt
+    command -v pasta >/dev/null 2>&1 || {
+      echo "Error: passt installed but the pasta command is still unavailable." >&2
+      exit 1
+    }
+  fi
+
+  # Podman's user restart unit restores containers with restart policies after
+  # the user's next login. Enable, but do not start it (which could start every
+  # existing Podman container unexpectedly).
+  if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
+    if ! systemctl --user is-enabled --quiet podman-restart.service; then
+      systemctl --user enable podman-restart.service ||
+        echo "Warning: could not enable podman-restart.service; containers may need manual restart after login." >&2
+    fi
+  else
+    echo "Warning: no systemd user manager; containers may need manual restart after login." >&2
+  fi
+fi
+
+for db in "${selected[@]}"; do
+  name=""
+  image=""
+  run_args=(run -d --restart=unless-stopped)
+  mssql_password=""
+  case "$db" in
+    MySQL)
+      name=mysql8; image=docker.io/library/mysql:8.4
+      run_args+=(--publish 127.0.0.1:3306:3306 --name "$name" -e MYSQL_ROOT_PASSWORD= -e MYSQL_ALLOW_EMPTY_PASSWORD=true)
+      ;;
+    PostgreSQL)
+      name=postgres18; image=docker.io/library/postgres:18
+      run_args+=(--publish 127.0.0.1:5432:5432 --name "$name" -e POSTGRES_HOST_AUTH_METHOD=trust)
+      ;;
+    Redis)
+      name=redis; image=docker.io/library/redis:7
+      run_args+=(--publish 127.0.0.1:6379:6379 --name "$name")
+      ;;
+    MongoDB)
+      name=mongodb; image=docker.io/library/mongo:noble
+      run_args+=(--publish 127.0.0.1:27017:27017 --name "$name" -e MONGO_INITDB_ROOT_USERNAME=admin -e MONGO_INITDB_ROOT_PASSWORD=admin123)
+      ;;
+    MariaDB)
+      name=mariadb11; image=docker.io/library/mariadb:11.8
+      run_args+=(--publish 127.0.0.1:3306:3306 --name "$name" -e MARIADB_ROOT_PASSWORD= -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=true)
+      ;;
+    MSSQL)
+      name=mssql; image=mcr.microsoft.com/mssql/server:2022-CU12-ubuntu-22.04
+      mssql_password="Omarchy!$(od -An -N12 -tx1 /dev/urandom | tr -d '[:space:]')9A"
+      run_args+=(--publish 127.0.0.1:1433:1433 --name "$name" -e MSSQL_PID=Developer -e ACCEPT_EULA=Y -e "MSSQL_SA_PASSWORD=$mssql_password")
+      ;;
+  esac
+
+  if engine_cmd container inspect "$name" >/dev/null 2>&1; then
+    status=$(engine_cmd inspect --format '{{.State.Status}}' "$name")
+    if [[ $status == running ]]; then
+      echo "$db is already running in container $name."
+    else
+      echo "Starting existing $db container $name..."
+      engine_cmd start "$name"
+    fi
+    continue
+  fi
+
+  echo "Starting $db with $engine (container: $name)..."
+  engine_cmd "${run_args[@]}" "$image"
+  echo "$db is running on localhost. Inspect logs with: $engine logs $name"
+  [[ -z $mssql_password ]] || echo "SQL Server SA password: $mssql_password"
+done

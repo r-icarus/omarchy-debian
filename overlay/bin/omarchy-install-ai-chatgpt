@@ -1,0 +1,18 @@
+#!/bin/bash
+# omarchy:summary=Install ChatGPT Desktop from OpenAI's Debian package.
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+if ! omarchy-pkg-present chatgpt; then
+  case $(dpkg --print-architecture) in
+    amd64) ;;
+    *) echo "ChatGPT Desktop's official Debian package is only published for amd64." >&2; exit 1 ;;
+  esac
+  omarchy-install-debian-deb \
+    https://persistent.oaistatic.com/codex-app-prod/linux/deb/latest/chatgpt_amd64.deb
+fi
+
+printf 'Opening ChatGPT…\n'
+setsid uwsm-app -- /usr/bin/chatgpt >/dev/null 2>&1 &
+echo "ChatGPT has been installed."

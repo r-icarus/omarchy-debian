@@ -68,6 +68,7 @@ function in install/20-external.sh), `manual`, `skip`.
 | `imv` | `apt-any` | imv — imv-wayland on some releases |
 | `inetutils` | `apt` | inetutils-ping |
 | `inotify-tools` | `apt` | inotify-tools |
+| `kitty` | `apt` | kitty — Default omarchy terminal |
 | `inxi` | `apt` | inxi |
 | `llvm` | `apt` | llvm |
 | `networkmanager` | `apt` | network-manager |
@@ -136,7 +137,7 @@ function in install/20-external.sh), `manual`, `skip`.
 | `tree-sitter-cli` | `apt-any` | tree-sitter-cli — external:tree-sitter for older releases |
 | `ttf-ia-writer` | `manual` | Proprietary font fetched from upstream tarball; see docs/MANUAL-STEPS.md |
 | `ttf-jetbrains-mono-nerd-basic` | `external` | nerd-fonts — Nerd Fonts release download |
-| `ttfx` | `skip` | Omarchy AUR package |
+| `ttfx` | `manual` | Run omarchy-install-screensaver to build pinned upstream ttfx into ~/.local/bin |
 | `tzupdate` | `manual` | AUR tool; use `timedatectl`/tzdata instead |
 | `udiskie` | `apt` | udiskie |
 | `ufw` | `apt` | ufw |
