@@ -1,0 +1,24 @@
+#!/bin/bash
+# omarchy:summary=Build the pinned upstream ttfx screensaver and initialize branding.
+set -euo pipefail
+# omacom/ttfx v0.5.0; keep the source revision immutable and dependencies locked.
+TTFX_REV=112ebb310b848d8f1251a5c2919a9cd5a5c78e18
+repo=${OMARCHY_DEBIAN_PATH:-$HOME/.local/share/omarchy-debian}
+omarchy=${OMARCHY_PATH:-$HOME/.local/share/omarchy}
+if ((EUID == 0)); then
+  echo 'Run as your desktop user, not root; apt will request sudo if needed.' >&2
+  exit 1
+fi
+if ! command -v cargo >/dev/null 2>&1 || ! command -v rustc >/dev/null 2>&1 || ! command -v cc >/dev/null 2>&1; then
+  "$repo/overlay/bin/omarchy-pkg-add" cargo rustc build-essential
+fi
+command -v git >/dev/null 2>&1 || "$repo/overlay/bin/omarchy-pkg-add" git
+cargo install --git https://github.com/omacom/ttfx.git --rev "$TTFX_REV" \
+  --locked --root "$HOME/.local" ttfx
+branding="$HOME/.config/omarchy/branding/screensaver.txt"
+if [[ ! -e $branding ]]; then
+  mkdir -p "$(dirname "$branding")"
+  install -m644 "$omarchy/logo.txt" "$branding"
+fi
+"$HOME/.local/bin/ttfx" --version
+echo 'Screensaver installed. Run omarchy-launch-screensaver force to preview (not a screen lock).'

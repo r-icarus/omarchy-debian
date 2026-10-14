@@ -1,0 +1,15 @@
+#!/bin/bash
+# omarchy:summary=Run the upstream screensaver after checking Debian prerequisites.
+set -euo pipefail
+export PATH="$HOME/.local/bin:$PATH"
+omarchy=${OMARCHY_PATH:-$HOME/.local/share/omarchy}
+if ! command -v ttfx >/dev/null 2>&1; then
+  echo 'Screensaver unavailable: run omarchy-install-screensaver to build ttfx.' >&2
+  exit 1
+fi
+branding="$HOME/.config/omarchy/branding/screensaver.txt"
+if [[ ! -e $branding ]]; then
+  mkdir -p "$(dirname "$branding")"
+  install -m644 "$omarchy/logo.txt" "$branding"
+fi
+exec "$omarchy/bin/omarchy-screensaver" "$@"

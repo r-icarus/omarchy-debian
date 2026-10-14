@@ -128,7 +128,7 @@ tobi-try	skip		Omarchy AUR package
 tree-sitter-cli	apt-any	tree-sitter-cli	external:tree-sitter for older releases
 ttf-ia-writer	manual		Proprietary font fetched from upstream tarball; see docs/MANUAL-STEPS.md
 ttf-jetbrains-mono-nerd-basic	external	nerd-fonts	Nerd Fonts release download
-ttfx	skip		Omarchy AUR package
+ttfx	manual		Run omarchy-install-screensaver to build pinned upstream ttfx into ~/.local/bin
 tzupdate	manual		AUR tool; use `timedatectl`/tzdata instead
 udiskie	apt	udiskie
 ufw	apt	ufw

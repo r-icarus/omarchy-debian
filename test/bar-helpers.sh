@@ -36,4 +36,7 @@ MOCK
   output=$(PATH="$TMP/bin:$PATH" "$ROOT/overlay/bin/powerprofilesctl" list)
   [[ $output == $'* balanced:\n  power-saver:' ]]
 fi
+# Cached package checks should converge promptly after external apt upgrades.
+grep -Fq '+    interval: 60000' "$ROOT/patches/quattro-qml-compat.patch"
+grep -Fq '+    tooltipText: "Pending system updates (cached APT metadata)"' "$ROOT/patches/quattro-qml-compat.patch"
 echo 'bar helper tests passed'

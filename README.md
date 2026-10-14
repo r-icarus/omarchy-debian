@@ -127,6 +127,15 @@ snapper sync, plymouth theme) are not ported.
 
 Things a human still has to do: **[docs/MANUAL-STEPS.md](docs/MANUAL-STEPS.md)**.
 
+## Screensaver
+
+Run `omarchy-install-screensaver` as your desktop user to build upstream
+`omacom/ttfx` v0.5.0 at a pinned commit with locked Cargo dependencies.
+Missing Rust/build tools are installed through apt (sudo required); the binary
+is installed under `~/.local/bin`. Missing branding is initialized from the
+upstream logo without overwriting custom text. Preview with
+`omarchy-launch-screensaver force`. This animation is **not a screen lock**.
+
 ## Bash prompt
 
 The dotfiles phase sources upstream `default/bash/rc` from a managed block in

@@ -164,6 +164,26 @@ index 1fdf4dec..856f9463 100644
            // stays crisp and avoids temporary images and file-cache races. Only
            // the dark modules paint, so the white canvas can keep its rounded
            // corners; the spec quiet zone baked into the matrix keeps the code
+diff --git a/shell/plugins/bar/widgets/SystemUpdate.qml b/shell/plugins/bar/widgets/SystemUpdate.qml
+--- a/shell/plugins/bar/widgets/SystemUpdate.qml
++++ b/shell/plugins/bar/widgets/SystemUpdate.qml
+@@ -47,6 +47,6 @@ BarWidget {
+   Timer {
+-    interval: 21600000
++    interval: 60000
+     running: true
+     repeat: true
+     triggeredOnStart: true
+     onTriggered: root.refresh()
+@@ -58,7 +58,7 @@ BarWidget {
+     bar: root.bar
+     text: "\uf021"
+     slotSize: Style.bar.statusSlot
+-    tooltipText: "Pending Omarchy Updates"
++    tooltipText: "Pending system updates (cached APT metadata)"
+     onPressed: root.runUpdate()
+   }
+ }
 diff --git a/shell/services/BackgroundIntro.qml b/shell/services/BackgroundIntro.qml
 index a2530b8e..0667c316 100644
 --- a/shell/services/BackgroundIntro.qml
