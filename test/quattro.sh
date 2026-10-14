@@ -611,6 +611,8 @@ grep -q 'tokyo-night' docs/QUATTRO-QUICKSHELL.md &&
 
 clean_target
 
+check "cursor selection preserves custom themes and falls back safely" bash test/cursor.sh
+
 echo
 if ((FAIL)); then
   echo "QUATTRO TESTS: FAILED"

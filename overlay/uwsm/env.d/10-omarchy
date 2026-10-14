@@ -13,11 +13,21 @@ export PATH
 export TERMINAL=xdg-terminal-exec
 export EDITOR=nvim
 
-# Cursor theme. PikaOS's `default` cursor theme is a self-inheriting Adwaita
-# alias that can return null surfaces; give the quattro startup-cursor reveal
-# a complete theme. Inherit any explicit user preference first.
-export XCURSOR_THEME="${XCURSOR_THEME:-Bibata-Modern-Classic}"
-export HYPRCURSOR_THEME="${HYPRCURSOR_THEME:-Bibata-Modern-Classic}"
+# Upstream uses the Adwaita/default family. Pin a concrete complete theme,
+# never the automatic alias that previously produced null cursor surfaces.
+# Keep explicit user choices; retain Bibata as the known-good PikaOS fallback.
+if [ -z "${XCURSOR_THEME:-}" ]; then
+  if [ -s /usr/share/icons/Adwaita/cursors/left_ptr ] \
+     && [ -s /usr/share/icons/Adwaita/cursors/pointer ] \
+     && [ -s /usr/share/icons/Adwaita/cursors/text ] \
+     && [ -s /usr/share/icons/Adwaita/cursors/wait ]; then
+    export XCURSOR_THEME=Adwaita
+  else
+    export XCURSOR_THEME=Bibata-Modern-Classic
+  fi
+fi
+export HYPRCURSOR_THEME="${HYPRCURSOR_THEME:-$XCURSOR_THEME}"
 export XCURSOR_SIZE="${XCURSOR_SIZE:-24}"
+export HYPRCURSOR_SIZE="${HYPRCURSOR_SIZE:-$XCURSOR_SIZE}"
 
 [ -f "$HOME/.config/uwsm/default" ] && . "$HOME/.config/uwsm/default"

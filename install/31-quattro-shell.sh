@@ -85,12 +85,17 @@ if [[ $DRY_RUN != "1" ]]; then
   # index.theme) returns null cairo surfaces. Complete it from a full system
   # cursor theme when one is available.
   STARTUP_CURSORS="$OMARCHY_QUATTRO_PATH/default/hypr/cursors/omarchy-startup"
-  if [[ -d $STARTUP_CURSORS/cursors ]] \
-     && [[ ! -f $STARTUP_CURSORS/index.theme ]] \
-     && [[ -d /usr/share/icons/Bibata-Modern-Classic/cursors ]]; then
-    cp /usr/share/icons/Bibata-Modern-Classic/cursors/* "$STARTUP_CURSORS/cursors/"
-    printf '[Icon Theme]\nName=omarchy-startup\nInherits=hicolor\n' >"$STARTUP_CURSORS/index.theme"
-    log "completed omarchy-startup cursor theme from Bibata-Modern-Classic"
+  if [[ -d $STARTUP_CURSORS/cursors && ! -f $STARTUP_CURSORS/index.theme ]]; then
+    for cursor_theme in Adwaita Bibata-Modern-Classic; do
+      cursor_source="/usr/share/icons/$cursor_theme/cursors"
+      [[ -s $cursor_source/left_ptr && -s $cursor_source/pointer \
+         && -s $cursor_source/text && -s $cursor_source/wait ]] || continue
+      cp "$cursor_source/"* "$STARTUP_CURSORS/cursors/"
+      printf '[Icon Theme]\nName=omarchy-startup\nInherits=hicolor\n' >"$STARTUP_CURSORS/index.theme"
+      log "completed omarchy-startup cursor theme from $cursor_theme"
+      break
+    done
+    omd_chown_path "$STARTUP_CURSORS"
   fi
 fi
 

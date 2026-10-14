@@ -171,8 +171,9 @@ wallpaper, 2x HiDPI scale, natural scrolling. Issues hit and their fixes
 4. **PikaOS Hyprland segfaults (SEGV in CCursorBuffer)** when a cursor shape
    resolves to a null surface: the skeletal `omarchy-startup` blank-cursor
    theme plus PikaOS's self-inheriting `default` theme alias trigger it.
-   31-quattro-shell.sh completes the startup theme from Bibata and the uwsm
-   env pins a complete cursor theme.
+   31-quattro-shell.sh completes the startup theme from Adwaita or Bibata, and
+   the uwsm env now prefers complete Adwaita assets to match upstream, retaining
+   Bibata as a fallback. See [cursor notes](CURSORS.md).
 5. **Hyprland 0.56 config syntax**: the overlay's classic-syntax
    `hyprland.conf` needed updates (shadow block, `windowrule` field=value
    selectors; `dwindle:pseudotile`/`misc:vfr` removed). On Hyprland >= 0.50

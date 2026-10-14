@@ -1,6 +1,7 @@
 # Mapping of upstream install/omarchy-base.packages -> Debian/Ubuntu.
 # TSV columns: arch_pkg	strategy	argument	notes
 # Strategies: apt | apt-any (| separated candidates) | external | manual | skip
+adwaita-cursors	apt	adwaita-icon-theme	Upstream cursor family; Debian/PikaOS bundle the complete cursors in the icon-theme package
 aether	skip		Omarchy AUR package (screensaver/lock screen); no Debian equivalent. See docs/MANUAL-STEPS.md
 alsa-utils	apt	alsa-utils
 asdcontrol	skip		AUR-only (Apple Studio Display brightness); build from source if needed
