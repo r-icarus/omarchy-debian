@@ -1,0 +1,27 @@
+#!/bin/bash
+# PikaOS tuned-ppd exposes the standard PowerProfiles D-Bus interface but
+# does not ship powerprofilesctl. Use the native CLI when available, otherwise
+# implement the list/get/set operations used by Omarchy without replacing tuned.
+set -euo pipefail
+if [[ -x /usr/bin/powerprofilesctl ]]; then
+  exec /usr/bin/powerprofilesctl "$@"
+fi
+service=net.hadess.PowerProfiles
+path=/net/hadess/PowerProfiles
+active() { busctl --system --json=short get-property "$service" "$path" "$service" ActiveProfile | jq -er '.data'; }
+case ${1:-list} in
+  get) active ;;
+  list)
+    current=$(active)
+    busctl --system --json=short get-property "$service" "$path" "$service" Profiles |
+      jq -r --arg current "$current" '.data[] | .Profile.data | (if . == $current then "* " else "  " end) + . + ":"'
+    ;;
+  set)
+    [[ $# == 2 ]] || { echo 'Usage: powerprofilesctl set <profile>' >&2; exit 2; }
+    # Validate against the service rather than hardcoding hardware capabilities.
+    busctl --system --json=short get-property "$service" "$path" "$service" Profiles |
+      jq -e --arg profile "$2" 'any(.data[]; .Profile.data == $profile)' >/dev/null
+    busctl --system set-property "$service" "$path" "$service" ActiveProfile s "$2"
+    ;;
+  *) echo 'Supported operations: list, get, set <profile>' >&2; exit 2 ;;
+esac

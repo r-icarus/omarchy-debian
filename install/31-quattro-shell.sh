@@ -301,6 +301,15 @@ if ! command -v gtk-launch >/dev/null 2>&1; then
   fi
 fi
 
+# The full upstream keyboard-layout picker discovers layouts through xkbcli.
+if ! command -v xkbcli >/dev/null 2>&1; then
+  if apt_available libxkbcommon-tools; then
+    apt_install libxkbcommon-tools
+  else
+    warn "xkbcli unavailable — keyboard layout discovery will be limited"
+  fi
+fi
+
 # QML runtime modules the bar imports that are not hard Depends of the .deb.
 for mod in \
   qml6-module-qtqml-workerscript \

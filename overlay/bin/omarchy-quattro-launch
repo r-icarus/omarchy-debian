@@ -13,6 +13,10 @@
 set -uo pipefail
 
 OMARCHY_QUATTRO_PATH="${OMARCHY_QUATTRO_PATH:-$HOME/.local/share/omarchy-quattro}"
+export OMARCHY_PATH="${OMARCHY_PATH:-$HOME/.local/share/omarchy}"
+export OMARCHY_DEBIAN_PATH="${OMARCHY_DEBIAN_PATH:-$HOME/.local/share/omarchy-debian}"
+# Direct QML Process launches must resolve Debian adapters before upstream.
+export PATH="$OMARCHY_DEBIAN_PATH/overlay/bin:$OMARCHY_PATH/bin:$HOME/.local/bin:$PATH"
 
 [[ -d $OMARCHY_QUATTRO_PATH/shell ]] || {
   echo "omarchy-quattro-launch: $OMARCHY_QUATTRO_PATH/shell not found (run the quattro profile)" >&2

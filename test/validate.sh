@@ -68,6 +68,9 @@ else
   say "(shellcheck not installed — skipped)"
 fi
 
+say "== bar helper tests =="
+bash test/bar-helpers.sh || fail=1
+
 say "== Bash startup tests =="
 bash test/bash-startup.sh || fail=1
 

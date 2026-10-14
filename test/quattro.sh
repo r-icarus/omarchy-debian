@@ -28,14 +28,19 @@ cfg = json.load(open(sys.argv[1]))
 bar = cfg["bar"]
 assert bar["position"] == "top", "bar must be top"
 ids = [w["id"] for sec in ("left", "center", "right") for w in bar["layout"][sec]]
-required = {"omarchy.workspaces", "omarchy.clock", "omarchy.tray"}
+required = {"omarchy.menu", "omarchy.workspaces", "omarchy.clock", "omarchy.tray",
+            "omarchy.network", "omarchy.power", "omarchy.bluetooth", "omarchy.monitor",
+            "omarchy.keyboard-layout", "omarchy.indicators", "omarchy.elsewhen",
+            "omarchy.weather", "omarchy.agents", "omarchy.system-update"}
 missing = required - set(ids)
 assert not missing, f"missing required widgets: {missing}"
 known = {
   "omarchy.menu", "omarchy.workspaces", "omarchy.active-window",
   "omarchy.clock", "omarchy.tray", "omarchy.audio", "omarchy.indicators",
   "omarchy.keyboard-layout", "omarchy.microphone", "omarchy.spacer",
-  "omarchy.system-update",
+  "omarchy.system-update", "omarchy.network", "omarchy.power",
+  "omarchy.bluetooth", "omarchy.monitor", "omarchy.agents",
+  "omarchy.elsewhen", "omarchy.weather",
 }
 unknown = set(ids) - known
 assert not unknown, f"unknown widget ids: {unknown}"
