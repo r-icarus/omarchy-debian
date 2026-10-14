@@ -6,6 +6,13 @@
   "install.style.font.victor": {"when":"false"},
   "install.style.font.bitstream": {"when":"false"},
 
+  // PikaOS uses Podman as its Docker-compatible container engine.
+  "install.development.docker-dbs": {
+    "icon":"",
+    "label":"Docker DB",
+    "action":"\"$OMARCHY_DEBIAN_PATH/overlay/bin/omarchy-launch-floating-terminal-with-presentation\" \"$OMARCHY_DEBIAN_PATH/overlay/bin/omarchy-install-docker-dbs\""
+  },
+
   // Packaged Linux desktop apps with official vendor distribution paths.
   "install.ai.chatgpt": {
     "disabled":"omarchy-pkg-present chatgpt",

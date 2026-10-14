@@ -7,8 +7,9 @@
 ```
 
 Checks: `bash -n` on every script, map format/strategy sanity, package-helper
-behavior and Development installer/removal paths with mocked apt/dpkg commands,
-every `external:` id having an installer function, and — when
+behavior, Development installer/removal paths with mocked apt/dpkg commands,
+and the Podman database action with a fake engine; every `external:` id has an
+installer function, and — when
 `OMARCHY_UPSTREAM_PKG_LIST` points at upstream's
 `omarchy-base.packages` — full coverage of the upstream package list:
 

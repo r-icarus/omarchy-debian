@@ -144,6 +144,8 @@ is also hidden because it is not a drop-in for the upstream menu entry. The
 Development → PHP → Symfony action adds Symfony's official Cloudsmith APT
 source only when selected, then installs the CLI through apt. The PHP removal
 path maps legacy package names to Debian packages and skips packages not installed.
+The Development DB action prefers rootless Podman on PikaOS and enables its
+user restart unit without starting unrelated containers.
 
 ## Validation
 

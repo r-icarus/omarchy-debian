@@ -75,7 +75,7 @@ else
   fail=1
 fi
 say "== development menu tests =="
-if bash test/dev-env.sh && bash test/remove-dev-env.sh; then
+if bash test/dev-env.sh && bash test/remove-dev-env.sh && bash test/container-dbs.sh; then
   :
 else
   fail=1
