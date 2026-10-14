@@ -127,6 +127,15 @@ snapper sync, plymouth theme) are not ported.
 
 Things a human still has to do: **[docs/MANUAL-STEPS.md](docs/MANUAL-STEPS.md)**.
 
+## Bash prompt
+
+The dotfiles phase sources upstream `default/bash/rc` from a managed block in
+`~/.bashrc` and deploys upstream `config/starship.toml` to `~/.config/starship.toml`.
+This enables Omarchy's directory/Git prompt, aliases, completions, mise, and
+zoxide where installed. Debian overlay commands stay first in PATH. Existing
+custom Bash settings are preserved, with a backup before updating the managed
+block. Open a new Bash terminal after deployment to activate it.
+
 ## Package helper and installer menus
 
 The Debian `omarchy-pkg-add` resolves upstream package names through

@@ -68,6 +68,9 @@ else
   say "(shellcheck not installed — skipped)"
 fi
 
+say "== Bash startup tests =="
+bash test/bash-startup.sh || fail=1
+
 say "== package helper tests =="
 if bash test/pkg-add.sh; then
   :

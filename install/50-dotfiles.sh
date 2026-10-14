@@ -120,10 +120,21 @@ if [[ $DRY_RUN == "1" ]]; then
   log "dry-run: add omarchy block to ~/.bashrc"
 else
   touch "$HOME/.bashrc"
-  if ! grep -qF "$MARKER" "$HOME/.bashrc"; then
-    printf '\n%s\n' "$BASHRC_SNIPPET" >>"$HOME/.bashrc"
-    log "added omarchy block to ~/.bashrc"
+  # Refresh our managed block on upgrades while preserving user customizations.
+  # Back up before changing the file; never source the user's shell during install.
+  bashrc_tmp=$(mktemp)
+  awk '
+    $0 == "# >>> omarchy-debian >>>" { managed=1; next }
+    $0 == "# <<< omarchy-debian <<<" { managed=0; next }
+    !managed { print }
+  ' "$HOME/.bashrc" >"$bashrc_tmp"
+  printf '%s\n' "$BASHRC_SNIPPET" >>"$bashrc_tmp"
+  if ! cmp -s "$bashrc_tmp" "$HOME/.bashrc"; then
+    [[ -f $HOME/.bashrc.pre-omarchy ]] || cp -a "$HOME/.bashrc" "$HOME/.bashrc.pre-omarchy"
+    cp "$bashrc_tmp" "$HOME/.bashrc"
+    log "updated omarchy block in ~/.bashrc"
   fi
+  rm -f "$bashrc_tmp"
 fi
 
 # --- 5. state dirs -------------------------------------------------------------
