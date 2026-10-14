@@ -6,10 +6,11 @@
 ./test/validate.sh
 ```
 
-Checks: `bash -n` on every script, map format/strategy sanity, every
-`external:` id has an installer function, and — when
-`OMARCHY_UPSTREAM_PKG_LIST` points at upstream's `omarchy-base.packages` —
-full coverage of the upstream package list:
+Checks: `bash -n` on every script, map format/strategy sanity, package-helper
+behavior and Development installer/removal paths with mocked apt/dpkg commands,
+every `external:` id having an installer function, and — when
+`OMARCHY_UPSTREAM_PKG_LIST` points at upstream's
+`omarchy-base.packages` — full coverage of the upstream package list:
 
 ```bash
 git clone --depth 1 https://github.com/omacom/omarchy /tmp/omarchy

@@ -1,0 +1,31 @@
+#!/bin/bash
+# omarchy:summary=Install Claude Desktop from Anthropic's Debian repository.
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+if ! omarchy-pkg-present claude-desktop; then
+  key=$(mktemp)
+  trap 'rm -f "$key"' EXIT
+  curl --fail --location --silent --show-error \
+    --proto '=https' --proto-redir '=https' \
+    https://downloads.claude.ai/claude-desktop/key.asc -o "$key"
+  [[ -s $key ]] || { echo "Error: Anthropic's signing key download was empty." >&2; exit 1; }
+
+  if ((EUID == 0)); then
+    install -Dm644 "$key" /usr/share/keyrings/claude-desktop-archive-keyring.asc
+    printf '%s\n' 'deb [signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main' \
+      >/etc/apt/sources.list.d/claude-desktop.list
+    apt-get update
+  else
+    sudo install -Dm644 "$key" /usr/share/keyrings/claude-desktop-archive-keyring.asc
+    printf '%s\n' 'deb [signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc] https://downloads.claude.ai/claude-desktop/apt/stable stable main' |
+      sudo tee /etc/apt/sources.list.d/claude-desktop.list >/dev/null
+    sudo apt-get update
+  fi
+  omarchy-pkg-add claude-desktop
+fi
+
+printf 'Opening Claude Desktop…\n'
+setsid uwsm-app -- /usr/bin/claude-desktop >/dev/null 2>&1 &
+echo "Claude Desktop has been installed."

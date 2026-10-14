@@ -1,4 +1,180 @@
 #!/bin/bash
-# omarchy:summary=Install packages by name.
+# omarchy:summary=Install Debian packages or resolve upstream package names.
+# omarchy:args=<packages...>
 # omarchy:requires-sudo=true
-exec sudo apt-get install -y "$@"
+# Debian port: map upstream Arch/AUR names to apt candidates, skip installed
+# packages, and verify every requested package after installation.
+
+set -uo pipefail
+
+if (($# == 0)); then
+  echo "Usage: omarchy-pkg-add <package|local.deb> [...]" >&2
+  exit 2
+fi
+
+repo=${OMARCHY_DEBIAN_PATH:-}
+if [[ -z $repo || ! -d $repo/packages ]]; then
+  repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd) || repo=
+fi
+
+is_installed() {
+  [[ $(dpkg-query -W -f='${db:Status-Status}' "$1" 2>/dev/null || true) == installed ]]
+}
+
+apt_candidate() {
+  local candidate
+  candidate=$(apt-cache policy "$1" 2>/dev/null | awk '/Candidate:/{print $2; exit}')
+  [[ -n $candidate && $candidate != '(none)' ]]
+}
+
+resolve_request() {
+  local request=$1 mapfile pkg strategy arg notes candidate
+  local candidates=()
+
+  # Local .deb files are installed through apt so dependencies are resolved.
+  if [[ $request == *.deb ]]; then
+    if [[ ! -f $request ]]; then
+      printf 'Error: Debian package file not found: %s\n' "$request" >&2
+      return 1
+    fi
+    local deb_pkg
+    deb_pkg=$(dpkg-deb -f "$request" Package 2>/dev/null) || {
+      printf 'Error: invalid Debian package file: %s\n' "$request" >&2
+      return 1
+    }
+    if is_installed "$deb_pkg"; then
+      printf 'Already installed: %s (from %s)\n' "$deb_pkg" "$request"
+      return 0
+    fi
+    INSTALL_DEBS+=("$request")
+    VERIFY_PACKAGES+=("$deb_pkg")
+    return 0
+  fi
+
+  # Preserve the upstream helper's skip-if-installed behavior even when a map
+  # points elsewhere or marks the original name as hardware/manual/external.
+  if is_installed "$request"; then
+    printf 'Already installed: %s\n' "$request"
+    VERIFY_PACKAGES+=("$request")
+    return 0
+  fi
+
+  # Resolve upstream package names through the fork's Debian maps. A mapped
+  # package is preferred over a same-named apt package when the map declares it.
+  if [[ -n $repo && -d $repo/packages ]]; then
+    for mapfile in "$repo"/packages/*.map; do
+      [[ -f $mapfile ]] || continue
+      while IFS=$'\t' read -r pkg strategy arg notes; do
+        [[ -z $pkg || $pkg == \#* || $pkg != "$request" ]] && continue
+        case "$strategy" in
+          apt)
+            candidate=$arg
+            if is_installed "$candidate"; then
+              printf 'Already installed: %s -> %s\n' "$request" "$candidate"
+              VERIFY_PACKAGES+=("$candidate")
+              return 0
+            fi
+            if apt_candidate "$candidate"; then
+              INSTALL_PACKAGES+=("$candidate")
+              VERIFY_PACKAGES+=("$candidate")
+              return 0
+            fi
+            printf 'Error: mapped package %s -> %s has no apt candidate. Try apt update or check %s.\n' "$request" "$candidate" "$mapfile" >&2
+            return 1
+            ;;
+          apt-any)
+            IFS='|' read -r -a candidates <<<"$arg"
+            for candidate in "${candidates[@]}"; do
+              if is_installed "$candidate"; then
+                printf 'Already installed: %s -> %s\n' "$request" "$candidate"
+                VERIFY_PACKAGES+=("$candidate")
+                return 0
+              fi
+            done
+            for candidate in "${candidates[@]}"; do
+              if apt_candidate "$candidate"; then
+                INSTALL_PACKAGES+=("$candidate")
+                VERIFY_PACKAGES+=("$candidate")
+                return 0
+              fi
+            done
+            printf 'Error: no apt candidate for %s (tried: %s). Try apt update or check %s.\n' "$request" "$arg" "$mapfile" >&2
+            return 1
+            ;;
+          apt-hw)
+            if is_installed "$arg"; then
+              printf 'Already installed: %s -> %s\n' "$request" "$arg"
+              VERIFY_PACKAGES+=("$arg")
+              return 0
+            fi
+            printf 'Error: %s is hardware-conditional; install it through the matching hardware setup.\n' "$request" >&2
+            return 1
+            ;;
+          external)
+            printf 'Error: %s uses the Debian fork external installer, not apt.\n' "$request" >&2
+            return 1
+            ;;
+          manual | skip)
+            printf 'Error: %s is not an automatically installable Debian package (%s).\n' "$request" "${notes:-$arg}" >&2
+            return 1
+            ;;
+          *)
+            printf 'Error: unknown Debian mapping strategy for %s: %s\n' "$request" "$strategy" >&2
+            return 1
+            ;;
+        esac
+      done <"$mapfile"
+    done
+  fi
+
+  # Unmapped names are treated as exact Debian package names.
+  if apt_candidate "$request"; then
+    INSTALL_PACKAGES+=("$request")
+    VERIFY_PACKAGES+=("$request")
+    return 0
+  fi
+  printf 'Error: no Debian mapping or apt candidate for %s.\n' "$request" >&2
+  return 1
+}
+
+INSTALL_PACKAGES=()
+INSTALL_DEBS=()
+VERIFY_PACKAGES=()
+failed=0
+for request in "$@"; do
+  resolve_request "$request" || failed=1
+done
+
+# Do not partially install a request when any of its names is unsupported.
+((failed == 0)) || exit 1
+
+run_privileged() {
+  if ((EUID == 0)); then
+    "$@"
+  else
+    command -v sudo >/dev/null 2>&1 || {
+      echo "Error: sudo is required to install packages (or run as root)." >&2
+      return 1
+    }
+    sudo "$@"
+  fi
+}
+
+if ((${#INSTALL_PACKAGES[@]})); then
+  printf 'Installing apt packages: %s\n' "${INSTALL_PACKAGES[*]}"
+  run_privileged env DEBIAN_FRONTEND=noninteractive apt-get install -y -- "${INSTALL_PACKAGES[@]}" || exit $?
+fi
+
+if ((${#INSTALL_DEBS[@]})); then
+  for deb in "${INSTALL_DEBS[@]}"; do
+    printf 'Installing Debian package: %s\n' "$deb"
+    run_privileged env DEBIAN_FRONTEND=noninteractive apt install -y "$deb" || exit $?
+  done
+fi
+
+for pkg in "${VERIFY_PACKAGES[@]}"; do
+  if ! is_installed "$pkg"; then
+    printf 'Error: package %s did not install.\n' "$pkg" >&2
+    exit 1
+  fi
+done

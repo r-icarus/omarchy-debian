@@ -1,8 +1,63 @@
-// Debian/PikaOS port: no AUR. Hide Arch-only menu entries.
+// Debian/PikaOS port: no AUR; use official vendor packages for supported AI desktops.
 {
   "install.aur": {"when":"false"},
   // No Debian packages for these fonts (see overlay/bin/omarchy-install-font)
   "install.style.font.meslo": {"when":"false"},
   "install.style.font.victor": {"when":"false"},
-  "install.style.font.bitstream": {"when":"false"}
+  "install.style.font.bitstream": {"when":"false"},
+
+  // Packaged Linux desktop apps with official vendor distribution paths.
+  "install.ai.chatgpt": {
+    "disabled":"omarchy-pkg-present chatgpt",
+    "action":"omarchy-launch-floating-terminal-with-presentation omarchy-install-ai-chatgpt"
+  },
+  "install.ai.claude": {
+    "disabled":"omarchy-pkg-present claude-desktop",
+    "action":"omarchy-launch-floating-terminal-with-presentation omarchy-install-ai-claude"
+  },
+  "install.ai.grok-bot": {
+    "disabled":"omarchy-pkg-present grok-bot",
+    "action":"omarchy-launch-floating-terminal-with-presentation omarchy-install-ai-grok-bot"
+  },
+  "install.ai.lm-studio": {
+    "disabled":"omarchy-pkg-present lm-studio",
+    "action":"omarchy-launch-floating-terminal-with-presentation omarchy-install-ai-lm-studio"
+  },
+  "install.ai.t3-code": {
+    "disabled":"omarchy-pkg-present t3code",
+    "action":"omarchy-launch-floating-terminal-with-presentation omarchy-install-ai-t3-code"
+  },
+
+  // These upstream entries rely on AUR or shell installers, so keep them out
+  // until they have a Debian-native package path.
+  "install.ai.hermes": {"when":"false"},
+  "install.ai.ollama": {"when":"false"},
+  "install.ai.openclaw": {"when":"false"},
+  "install.ai.perplexity": {"when":"false"},
+
+  // Keep Remove in sync with the package names installed above.
+  "remove.ai.chatgpt": {
+    "when":"omarchy-pkg-present chatgpt",
+    "action":"omarchy-launch-floating-terminal-with-presentation omarchy-remove-ai-chatgpt"
+  },
+  "remove.ai.claude": {
+    "when":"omarchy-pkg-present claude-desktop",
+    "action":"omarchy-launch-floating-terminal-with-presentation omarchy-remove-ai-claude"
+  },
+  "remove.ai.grok-bot": {
+    "when":"omarchy-pkg-present grok-bot",
+    "action":"omarchy-launch-floating-terminal-with-presentation omarchy-remove-ai-grok-bot"
+  },
+  "remove.ai.lm-studio": {
+    "when":"omarchy-pkg-present lm-studio",
+    "action":"omarchy-launch-floating-terminal-with-presentation omarchy-remove-ai-lm-studio"
+  },
+  "remove.ai.t3-code": {
+    "when":"omarchy-pkg-present t3code",
+    "action":"omarchy-launch-floating-terminal-with-presentation omarchy-remove-ai-t3-code"
+  },
+  "remove.ai.hermes": {"when":"false"},
+  "remove.ai.ollama": {"when":"false"},
+  "remove.ai.openclaw": {"when":"false"},
+  "remove.ai.perplexity": {"when":"false"}
 }

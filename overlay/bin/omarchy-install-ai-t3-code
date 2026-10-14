@@ -1,0 +1,40 @@
+#!/bin/bash
+# omarchy:summary=Install T3 Code and verify the latest release's SHA-256 digest.
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+T3CODE_HOME=${T3CODE_HOME:-$HOME/.t3}
+T3CODE_STATE_DIR=$T3CODE_HOME/userdata
+
+if ! omarchy-pkg-present t3code; then
+  arch=$(dpkg --print-architecture)
+  case $arch in
+    amd64 | arm64) ;;
+    *) echo "T3 Code's Debian release is not available for $arch." >&2; exit 1 ;;
+  esac
+
+  command -v jq >/dev/null 2>&1 || omarchy-pkg-add jq
+  release=$(curl --fail --location --silent --show-error \
+    --proto '=https' --proto-redir '=https' \
+    -H 'Accept: application/vnd.github+json' \
+    https://api.github.com/repos/pingdotgg/t3code/releases/latest)
+  asset=$(printf '%s' "$release" | jq -er --arg arch "$arch" \
+    'first(.assets[] | select(.name | endswith("-" + $arch + ".deb")) | [.browser_download_url, (.digest // "")] | @tsv)')
+  IFS=$'\t' read -r url digest <<<"$asset"
+  if [[ $url != https://github.com/pingdotgg/t3code/releases/download/* || $digest != sha256:* ]]; then
+    echo "Error: T3 Code's latest release did not provide a verifiable Debian package." >&2
+    exit 1
+  fi
+  omarchy-install-debian-deb "$url" "$digest"
+fi
+
+mkdir -p "$T3CODE_STATE_DIR"
+if [[ ! -f $HOME/.local/state/omarchy/current/theme/t3code.json ]]; then
+  omarchy-theme-refresh
+fi
+omarchy-theme-set-t3code
+t3 theme set omarchy --base-dir "$T3CODE_HOME"
+
+setsid uwsm-app -- gtk-launch t3code >/dev/null 2>&1 &
+echo "T3 Code has been installed."

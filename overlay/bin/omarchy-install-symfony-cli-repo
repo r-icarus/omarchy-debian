@@ -1,0 +1,21 @@
+#!/bin/bash
+# omarchy:summary=Add Symfony's official APT repository on demand.
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+command -v curl >/dev/null 2>&1 || { echo "Error: curl is required to add Symfony's APT repository." >&2; exit 1; }
+setup=$(mktemp)
+trap 'rm -f "$setup"' EXIT
+curl --fail --location --silent --show-error \
+  --proto '=https' --proto-redir '=https' \
+  https://dl.cloudsmith.io/public/symfony/stable/setup.deb.sh -o "$setup"
+bash -n "$setup" || { echo "Error: Symfony's repository setup script failed shell syntax validation." >&2; exit 1; }
+
+if ((EUID == 0)); then
+  bash "$setup"
+  apt-get update
+else
+  sudo -E bash "$setup"
+  sudo apt-get update
+fi

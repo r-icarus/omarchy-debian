@@ -127,6 +127,24 @@ snapper sync, plymouth theme) are not ported.
 
 Things a human still has to do: **[docs/MANUAL-STEPS.md](docs/MANUAL-STEPS.md)**.
 
+## Package helper and installer menus
+
+The Debian `omarchy-pkg-add` resolves upstream package names through
+`packages/*.map`, falls back to exact apt package names, skips installed
+packages, and verifies the result. It also accepts local `.deb` files so apt
+can resolve their dependencies. It fails clearly for unavailable or
+manual-only names instead of passing an AUR name to apt.
+
+The AI menu uses official Linux package paths for ChatGPT, Claude Desktop,
+Grok Bot, LM Studio, and T3 Code. Claude uses Anthropic's apt repository;
+ChatGPT, Grok Bot, and LM Studio use vendor `.deb` downloads; T3 Code's latest
+GitHub `.deb` is checked against its published SHA-256 digest. CLI/script-based
+AI entries are hidden for now; Perplexity's separate Portable Computer product
+is also hidden because it is not a drop-in for the upstream menu entry. The
+Development → PHP → Symfony action adds Symfony's official Cloudsmith APT
+source only when selected, then installs the CLI through apt. The PHP removal
+path maps legacy package names to Debian packages and skips packages not installed.
+
 ## Validation
 
 See **[docs/TESTING.md](docs/TESTING.md)**: `test/validate.sh` (syntax + map

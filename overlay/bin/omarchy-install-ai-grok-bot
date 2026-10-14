@@ -1,0 +1,27 @@
+#!/bin/bash
+# omarchy:summary=Install Grok Bot from Cursor's official Debian download.
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+if ! omarchy-pkg-present grok-bot; then
+  case $(dpkg --print-architecture) in
+    amd64) download_arch=x64; deb_arch=amd64 ;;
+    arm64) download_arch=arm64; deb_arch=arm64 ;;
+    *) echo "Grok Bot's official Debian package is not available for this architecture." >&2; exit 1 ;;
+  esac
+
+  page=$(curl --fail --location --silent --show-error \
+    --proto '=https' --proto-redir '=https' \
+    'https://cursor.com/download/bot?download=1')
+  url=$(printf '%s' "$page" | grep -oE \
+    "https://downloads\\.cursor\\.com/grokbot/stable/[^\"[:space:]]+/linux/${download_arch}/grok-bot_[^\"[:space:]]+_${deb_arch}\\.deb" | sed -n '1p')
+  if [[ -z $url ]]; then
+    echo "Error: could not find the official Grok Bot .deb link on Cursor's download page." >&2
+    exit 1
+  fi
+  omarchy-install-debian-deb "$url"
+fi
+
+setsid uwsm-app -- gtk-launch grok-bot >/dev/null 2>&1 &
+echo "Grok Bot has been installed."

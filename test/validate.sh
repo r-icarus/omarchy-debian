@@ -68,6 +68,19 @@ else
   say "(shellcheck not installed — skipped)"
 fi
 
+say "== package helper tests =="
+if bash test/pkg-add.sh; then
+  :
+else
+  fail=1
+fi
+say "== development menu tests =="
+if bash test/dev-env.sh && bash test/remove-dev-env.sh; then
+  :
+else
+  fail=1
+fi
+
 if ((fail)); then
   say "VALIDATION FAILED"
   exit 1
